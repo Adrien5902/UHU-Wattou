@@ -1,12 +1,10 @@
-mod commands;
-
 use poise::CreateReply;
 use serenity::{
-    all::{ChannelId, EditMessage, Message, MessageId, Ready},
+    all::{ChannelId, EditMessage, MessageId, Ready},
     async_trait,
     prelude::*,
 };
-use std::{cell::LazyCell, fs, time::SystemTime};
+use std::{cell::LazyCell, fs};
 use time::{Date, Duration, Month, OffsetDateTime, Weekday, macros::format_description};
 
 use dotenv::dotenv;
@@ -205,7 +203,6 @@ async fn main() {
         .setup(|ctx, _ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                let (groups, profs) = (WeekGroups::parse(), ProfData::parse());
                 Ok(())
             })
         })
