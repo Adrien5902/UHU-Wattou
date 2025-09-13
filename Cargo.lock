@@ -1903,7 +1903,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "uhu"
+name = "uhu-wattou"
 version = "0.1.0"
 dependencies = [
  "dotenv",
