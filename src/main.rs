@@ -1,17 +1,52 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use poise::CreateReply;
 use serenity::{
     all::{ChannelId, EditMessage, MessageId, Ready},
     async_trait,
     prelude::*,
 };
-use std::{cell::LazyCell, fs};
+use std::{
+    cell::LazyCell,
+    fs::{self, OpenOptions},
+    io::{self, Write},
+};
 use time::{Date, Duration, Month, OffsetDateTime, Weekday, macros::format_description};
 
 use dotenv::dotenv;
 use std::env;
 
-const TOUTES_LES_COLLES_MSG_ID: u64 = 1416198530648768522;
-const TOUTES_LES_COLLES_CHANNEL_ID: u64 = 1041736453555748926;
+pub fn write_to_log(s: &str) -> io::Result<()> {
+    let st = format!(
+        "{}: {}",
+        OffsetDateTime::now_local().unwrap().to_string(),
+        s
+    );
+    let mut f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("latest.log")?;
+    f.write_all(&st.as_bytes())?;
+    f.write_all(b"\n")?;
+    f.flush()
+}
+
+macro_rules! debug {
+    ($($arg:tt)*) => {
+        {
+            let s = format!($($arg)*);
+            #[cfg(not(debug_assertions))]
+            {
+                // in release mode
+                let _ = write_to_log(&s);
+            }
+            #[cfg(debug_assertions)]
+            {
+                println!("{}", s);
+            }
+        }
+    }
+}
 
 const DATA: LazyCell<Data> = LazyCell::new(|| {
     let (groups, profs) = (WeekGroups::parse(), ProfData::parse());
@@ -29,6 +64,16 @@ struct Data {
 }
 
 impl Data {
+    fn get_toutes_les_colles_id() -> Option<(u64, u64)> {
+        let Some(file) = fs::read_to_string("message.txt").ok() else {
+            return None;
+        };
+
+        let mut lines = file.lines();
+
+        Some((lines.next()?.parse().ok()?, lines.next()?.parse().ok()?))
+    }
+
     fn get_data_for_group(&self, group: usize) -> Vec<(Vec<usize>, (Prof, Prof))> {
         self.week_groups
             .iter()
@@ -80,10 +125,15 @@ impl Data {
             .next_occurrence(jour.into())
     }
 
-    fn day_to_string(&self, colle: &Prof, date: Date) -> String {
+    fn day_to_string(&self, colle: &Prof, date: Date, short: bool) -> String {
         format!(
             "{}: {} {} {} {} avec {} en {}",
-            colle.id,
+            if short {
+                colle.id.clone()
+            } else {
+                let explicit = explicit_colle_id(&colle.id).to_string();
+                explicit
+            },
             colle.jour.to_string(),
             date.day(),
             month_to_short_fr(date.month()),
@@ -101,7 +151,7 @@ impl Data {
                 .iter()
                 .enumerate()
                 .map(|(i, _)| format!(
-                    "\n### Groupe {}:{}",
+                    "\n## Groupe {}{}",
                     i + 1,
                     self.get_sorted_data_for_group(i + 1)
                         .iter()
@@ -109,11 +159,37 @@ impl Data {
                         .filter(|(date, _)| *date > OffsetDateTime::now_local().unwrap().date())
                         .collect::<Vec<_>>()[..2]
                         .iter()
-                        .map(|(date, colle)| format!("\n- {}", self.day_to_string(colle, *date)))
+                        .map(|(date, colle)| format!(
+                            "\n- {}",
+                            self.day_to_string(colle, *date, true)
+                        ))
                         .collect::<String>()
                 ))
                 .collect::<String>()
         )
+    }
+
+    async fn edit_toutes_les_colles_msg(
+        &self,
+        ctx: serenity::prelude::Context,
+    ) -> Result<(), Error> {
+        if let Some((message_id, channel_id)) = Data::get_toutes_les_colles_id() {
+            let channel = ChannelId::new(channel_id);
+            let mut message = channel
+                .message(&ctx.http, MessageId::new(message_id))
+                .await?;
+            message
+                .edit(
+                    ctx,
+                    EditMessage::new().content(self.prochaines_colles_msg()),
+                )
+                .await?;
+            debug!(
+                "edited message {} in channel {} successfully",
+                message_id, channel_id
+            );
+        }
+        Ok(())
     }
 }
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -124,17 +200,18 @@ async fn mes_colles(
     ctx: Context<'_>,
     #[description = "Groupe"] groupe: usize,
 ) -> Result<(), Error> {
+    ctx.defer_ephemeral().await?;
     ctx.send(
         CreateReply::default()
             .ephemeral(true)
             .content(format!(
                 "Prochaines colles pour le groupe {}: \n- {}",
                 groupe,
-                Data::sort_data(&DATA.get_data_for_group(groupe))[..3]
+                Data::sort_data(&DATA.get_data_for_group(groupe))[..5]
                     .iter()
                     .map(|(week, colle)| {
                         let date = DATA.get_date(*week, colle.jour);
-                        DATA.day_to_string(colle, date)
+                        DATA.day_to_string(colle, date, false)
                     })
                     .collect::<Vec<_>>()
                     .join("\n- ")
@@ -147,10 +224,11 @@ async fn mes_colles(
 
 #[poise::command(slash_command)]
 async fn toutes_les_colles(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.defer().await?;
     let handle = ctx.say(DATA.prochaines_colles_msg()).await?;
 
     let message = handle.message().await?;
-    println!(
+    debug!(
         "new toutes les colles msg : {} {}",
         message.id, message.channel_id,
     );
@@ -162,30 +240,17 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: serenity::prelude::Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        debug!("{} is connected!", ready.user.name);
 
         ctx.set_activity(Some(serenity::all::ActivityData {
-            name: "Les aventures de wattou".to_string(),
+            name: "les aventures de wattou".to_string(),
             kind: serenity::all::ActivityType::Watching,
             state: None,
             url: None,
         }));
 
-        let channel = ChannelId::new(TOUTES_LES_COLLES_CHANNEL_ID);
-        if let Some(mut message) = channel
-            .message(&ctx.http, MessageId::new(TOUTES_LES_COLLES_MSG_ID))
-            .await
-            .ok()
-        {
-            message
-                .edit(
-                    ctx,
-                    EditMessage::new().content(DATA.prochaines_colles_msg()),
-                )
-                .await
-                .unwrap();
-        } else {
-            println!("Error while retrieving the toutes les colles message");
+        if let Err(err) = DATA.edit_toutes_les_colles_msg(ctx).await {
+            debug!("Error : {:?}", err);
         }
     }
 }
@@ -392,4 +457,17 @@ fn month_to_short_fr(month: Month) -> String {
         Month::December => "Dec",
     }
     .to_string()
+}
+
+fn explicit_colle_id(id: &str) -> String {
+    let mut s = match id.chars().nth(0).unwrap() {
+        'M' => "Math",
+        'P' => "Physique",
+        'A' => "Anglais",
+        _ => panic!(),
+    }
+    .to_string();
+    s += " ";
+    s.extend(id.chars().nth(1));
+    s
 }
