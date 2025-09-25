@@ -2,7 +2,7 @@
 
 use poise::CreateReply;
 use serenity::{
-    all::{ChannelId, EditMessage, MessageId, Ready},
+    all::{ChannelId, EditMessage, Interaction, Message, MessageId, Ready},
     async_trait,
     prelude::*,
 };
@@ -64,14 +64,26 @@ struct Data {
 }
 
 impl Data {
-    fn get_toutes_les_colles_id() -> Option<(u64, u64)> {
-        let Some(file) = fs::read_to_string("message.txt").ok() else {
+    fn get_message_id(file_name: &str) -> Option<(u64, u64)> {
+        let Some(file) = fs::read_to_string(file_name.to_string() + ".txt").ok() else {
             return None;
         };
 
         let mut lines = file.lines();
 
         Some((lines.next()?.parse().ok()?, lines.next()?.parse().ok()?))
+    }
+
+    async fn get_message_from_file(
+        ctx: &serenity::prelude::Context,
+        file_name: &str,
+    ) -> Option<Result<Message, SerenityError>> {
+        let Some((message_id, channel_id)) = Data::get_message_id(file_name) else {
+            return None;
+        };
+
+        let channel = ChannelId::new(channel_id);
+        Some(channel.message(&ctx.http, MessageId::new(message_id)).await)
     }
 
     fn get_data_for_group(&self, group: usize) -> Vec<(Vec<usize>, (Colle, Colle))> {
@@ -146,7 +158,7 @@ impl Data {
     fn prochaines_colles_msg(&self) -> String {
         format!(
             "# Prochaines colles: {}",
-            (..&self.week_groups[0].groups.len())
+            (0..self.week_groups[0].groups.len())
                 .map(|i| format!(
                     "\n## Groupe {}{}",
                     i + 1,
@@ -168,13 +180,10 @@ impl Data {
 
     async fn edit_toutes_les_colles_msg(
         &self,
-        ctx: serenity::prelude::Context,
+        ctx: &serenity::prelude::Context,
     ) -> Result<(), Error> {
-        if let Some((message_id, channel_id)) = Data::get_toutes_les_colles_id() {
-            let channel = ChannelId::new(channel_id);
-            let mut message = channel
-                .message(&ctx.http, MessageId::new(message_id))
-                .await?;
+        if let Some(message_res) = Data::get_message_from_file(ctx, "message").await {
+            let mut message = message_res?;
             message
                 .edit(
                     ctx,
@@ -183,12 +192,56 @@ impl Data {
                 .await?;
             debug!(
                 "edited message {} in channel {} successfully",
-                message_id, channel_id
+                message.id, message.channel_id
+            );
+        }
+        Ok(())
+    }
+
+    fn semaine_tp_msg() -> String {
+        let date = OffsetDateTime::now_local()
+            .unwrap()
+            .date()
+            .next_occurrence(Weekday::Wednesday);
+
+        let grp = date.iso_week() % 2 == 1;
+
+        let math = "td maths";
+        let physique = "tp physique";
+
+        let (grp1, grp2);
+        if grp {
+            grp1 = math;
+            grp2 = physique;
+        } else {
+            grp1 = physique;
+            grp2 = math;
+        }
+
+        format!(
+            "Mercredi prochain ({} {}) le groupe 1 commence par {} et le groupe 2 par {}",
+            date.day(),
+            month_to_short_fr(date.month()),
+            grp1,
+            grp2
+        )
+    }
+
+    async fn edit_semaine_tp_msg(&self, ctx: &serenity::prelude::Context) -> Result<(), Error> {
+        if let Some(message_res) = Data::get_message_from_file(ctx, "semaine_tp_message").await {
+            let mut message = message_res?;
+            message
+                .edit(ctx, EditMessage::new().content(Data::semaine_tp_msg()))
+                .await?;
+            debug!(
+                "edited message {} in channel {} successfully",
+                message.id, message.channel_id
             );
         }
         Ok(())
     }
 }
+
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, (), Error>;
 
@@ -232,6 +285,16 @@ async fn toutes_les_colles(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+#[poise::command(slash_command)]
+async fn semaine_tp(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.defer().await?;
+    let handle = ctx.say(Data::semaine_tp_msg()).await?;
+
+    let message = handle.message().await?;
+    debug!("new semaine tp msg : {} {}", message.id, message.channel_id,);
+    Ok(())
+}
+
 struct Handler;
 
 #[async_trait]
@@ -246,9 +309,18 @@ impl EventHandler for Handler {
             url: None,
         }));
 
-        if let Err(err) = DATA.edit_toutes_les_colles_msg(ctx).await {
+        if let Err(err) = DATA.edit_toutes_les_colles_msg(&ctx).await {
             debug!("Error : {:?}", err);
         }
+
+        if let Err(err) = DATA.edit_semaine_tp_msg(&ctx).await {
+            debug!("Error : {:?}", err);
+        }
+    }
+
+    async fn interaction_create(&self, _ctx: serenity::prelude::Context, interaction: Interaction) {
+        let command = interaction.as_command().unwrap();
+        debug!("{} executed command {}", command.user.id, command.data.name);
     }
 }
 
@@ -259,7 +331,7 @@ async fn main() {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![mes_colles(), toutes_les_colles()],
+            commands: vec![mes_colles(), toutes_les_colles(), semaine_tp()],
             ..Default::default()
         })
         .setup(|ctx, _ready, framework| {
