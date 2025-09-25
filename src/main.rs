@@ -19,7 +19,7 @@ use std::env;
 pub fn write_to_log(s: &str) -> io::Result<()> {
     let st = format!(
         "{}: {}",
-        OffsetDateTime::now_local().unwrap().to_string(),
+        OffsetDateTime::now_local().unwrap().date().iso_week(),
         s
     );
     let mut f = OpenOptions::new()
@@ -49,7 +49,7 @@ macro_rules! debug {
 }
 
 const DATA: LazyCell<Data> = LazyCell::new(|| {
-    let (groups, profs) = (WeekGroups::parse(), ProfData::parse());
+    let (groups, profs) = (WeekGroups::parse(), CollesData::parse());
     Data {
         week_groups: groups,
         profs,
@@ -58,7 +58,7 @@ const DATA: LazyCell<Data> = LazyCell::new(|| {
 });
 
 struct Data {
-    profs: ProfData,
+    profs: CollesData,
     week_groups: Vec<WeekGroups>,
     weeks: Vec<Date>,
 }
@@ -74,7 +74,7 @@ impl Data {
         Some((lines.next()?.parse().ok()?, lines.next()?.parse().ok()?))
     }
 
-    fn get_data_for_group(&self, group: usize) -> Vec<(Vec<usize>, (Prof, Prof))> {
+    fn get_data_for_group(&self, group: usize) -> Vec<(Vec<usize>, (Colle, Colle))> {
         self.week_groups
             .iter()
             .map(|week_groups| {
@@ -96,12 +96,12 @@ impl Data {
             .collect()
     }
 
-    fn get_sorted_data_for_group(&self, groupe: usize) -> Vec<(usize, Prof)> {
+    fn get_sorted_data_for_group(&self, groupe: usize) -> Vec<(usize, Colle)> {
         Self::sort_data(&self.get_data_for_group(groupe))
     }
 
-    fn sort_data(data: &[(Vec<usize>, (Prof, Prof))]) -> Vec<(usize, Prof)> {
-        let mut week_colles: Vec<(usize, (Prof, Prof))> = data
+    fn sort_data(data: &[(Vec<usize>, (Colle, Colle))]) -> Vec<(usize, Colle)> {
+        let mut week_colles: Vec<(usize, (Colle, Colle))> = data
             .iter()
             .flat_map(|(weeks, colles)| weeks.iter().map(|week_id| (*week_id, colles.clone())))
             .collect();
@@ -122,10 +122,10 @@ impl Data {
     fn get_date(&self, week: usize, jour: Jour) -> Date {
         self.weeks[week - 1]
             .saturating_sub(Duration::days(7))
-            .next_occurrence(jour.into())
+            .next_occurrence(jour.inner())
     }
 
-    fn day_to_string(&self, colle: &Prof, date: Date, short: bool) -> String {
+    fn day_to_string(&self, colle: &Colle, date: Date, short: bool) -> String {
         format!(
             "{}: {} {} {} {} avec {} en {}",
             if short {
@@ -146,11 +146,8 @@ impl Data {
     fn prochaines_colles_msg(&self) -> String {
         format!(
             "# Prochaines colles: {}",
-            &self.week_groups[0]
-                .groups
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!(
+            (..&self.week_groups[0].groups.len())
+                .map(|i| format!(
                     "\n## Groupe {}{}",
                     i + 1,
                     self.get_sorted_data_for_group(i + 1)
@@ -281,7 +278,7 @@ async fn main() {
 }
 
 #[derive(Debug, Clone)]
-struct Prof {
+struct Colle {
     id: String,
     prof: String,
     horaire: String,
@@ -290,16 +287,16 @@ struct Prof {
 }
 
 #[derive(Debug)]
-struct ProfData(Vec<Prof>);
+struct CollesData(Vec<Colle>);
 
-impl ProfData {
+impl CollesData {
     fn parse() -> Self {
         let profs_data = fs::read_to_string("profs.txt").unwrap();
 
         Self(profs_data.lines().map(|d| d.into()).collect())
     }
 
-    fn from_ids(&self, ids: (String, String)) -> (Prof, Prof) {
+    fn from_ids(&self, ids: (String, String)) -> (Colle, Colle) {
         let mut results = self
             .0
             .iter()
@@ -311,7 +308,7 @@ impl ProfData {
     }
 }
 
-impl From<&str> for Prof {
+impl From<&str> for Colle {
     fn from(value: &str) -> Self {
         let mut str = value.to_string();
         let open_paren = value.find("(").unwrap();
@@ -335,56 +332,54 @@ impl From<&str> for Prof {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Jour {
-    Lundi,
-    Mardi,
-    Mercredi,
-    Jeudi,
-    Vendredi,
-    Samedi,
-    Dimanche,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Jour(Weekday);
+
+impl Jour {
+    fn inner(&self) -> Weekday {
+        self.0
+    }
 }
 
-impl Into<Weekday> for Jour {
-    fn into(self) -> Weekday {
-        match self {
-            Self::Lundi => Weekday::Monday,
-            Self::Mardi => Weekday::Tuesday,
-            Self::Mercredi => Weekday::Wednesday,
-            Self::Jeudi => Weekday::Thursday,
-            Self::Vendredi => Weekday::Friday,
-            Self::Samedi => Weekday::Saturday,
-            Self::Dimanche => Weekday::Sunday,
-        }
+impl Ord for Jour {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0
+            .number_days_from_monday()
+            .cmp(&other.0.number_days_from_monday())
+    }
+}
+
+impl PartialOrd for Jour {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
 impl From<&str> for Jour {
     fn from(value: &str) -> Self {
-        match value {
-            "Lu" => Self::Lundi,
-            "Ma" => Self::Mardi,
-            "Me" => Self::Mercredi,
-            "Je" => Self::Jeudi,
-            "Ve" => Self::Vendredi,
-            "Sa" => Self::Samedi,
-            "Di" => Self::Dimanche,
+        Self(match value {
+            "Lu" => Weekday::Monday,
+            "Ma" => Weekday::Tuesday,
+            "Me" => Weekday::Wednesday,
+            "Je" => Weekday::Thursday,
+            "Ve" => Weekday::Friday,
+            "Sa" => Weekday::Saturday,
+            "Di" => Weekday::Sunday,
             _ => panic!(),
-        }
+        })
     }
 }
 
 impl ToString for Jour {
     fn to_string(&self) -> String {
-        match self {
-            Self::Lundi => "Lundi",
-            Self::Mardi => "Mardi",
-            Self::Mercredi => "Mercredi",
-            Self::Jeudi => "Jeudi",
-            Self::Vendredi => "Vendredi",
-            Self::Samedi => "Samedi",
-            Self::Dimanche => "Dimanche",
+        match self.0 {
+            Weekday::Monday => "Lundi",
+            Weekday::Tuesday => "Mardi",
+            Weekday::Wednesday => "Mercredi",
+            Weekday::Thursday => "Jeudi",
+            Weekday::Friday => "Vendredi",
+            Weekday::Saturday => "Samedi",
+            Weekday::Sunday => "Dimanche",
         }
         .to_string()
     }
