@@ -160,8 +160,9 @@ impl Data {
             "# Prochaines colles: {}",
             (0..self.week_groups[0].groups.len())
                 .map(|i| format!(
-                    "\n## Groupe {}{}",
+                    "\n## Groupe {}{} {}",
                     i + 1,
+                    if i == 9 { " (fantôme 👻)" } else { "" },
                     self.get_sorted_data_for_group(i + 1)
                         .iter()
                         .map(|(week, colle)| (self.get_date(*week, colle.jour), colle))
