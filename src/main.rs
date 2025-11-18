@@ -1,8 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use ics::{
+    Event, ICalendar,
+    properties::{Categories, Description, DtEnd, DtStart, Organizer, Summary},
+};
 use poise::CreateReply;
 use serenity::{
-    all::{ChannelId, EditMessage, Interaction, Message, MessageId, Ready},
+    all::{ChannelId, CreateAttachment, EditMessage, Interaction, Message, MessageId, Ready},
     async_trait,
     prelude::*,
 };
@@ -11,10 +15,16 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
 };
-use time::{Date, Duration, Month, OffsetDateTime, Weekday, macros::format_description};
+use time::{
+    Date, Duration, Month, OffsetDateTime, Time, UtcDateTime, Weekday,
+    format_description::well_known::Iso8601, macros::format_description,
+};
+use uuid::Uuid;
 
 use dotenv::dotenv;
 use std::env;
+
+type WeekId = usize;
 
 pub fn write_to_log(s: &str) -> io::Result<()> {
     let st = format!(
@@ -86,7 +96,7 @@ impl Data {
         Some(channel.message(&ctx.http, MessageId::new(message_id)).await)
     }
 
-    fn get_data_for_group(&self, group: usize) -> Vec<(Vec<usize>, (Colle, Colle))> {
+    fn get_data_for_group(&self, group: usize) -> Vec<(Vec<WeekId>, (Colle, Colle))> {
         self.week_groups
             .iter()
             .map(|week_groups| {
@@ -108,12 +118,12 @@ impl Data {
             .collect()
     }
 
-    fn get_sorted_data_for_group(&self, groupe: usize) -> Vec<(usize, Colle)> {
+    fn get_sorted_data_for_group(&self, groupe: usize) -> Vec<(WeekId, Colle)> {
         Self::sort_data(&self.get_data_for_group(groupe))
     }
 
-    fn sort_data(data: &[(Vec<usize>, (Colle, Colle))]) -> Vec<(usize, Colle)> {
-        let mut week_colles: Vec<(usize, (Colle, Colle))> = data
+    fn sort_data(data: &[(Vec<WeekId>, (Colle, Colle))]) -> Vec<(WeekId, Colle)> {
+        let mut week_colles: Vec<(WeekId, (Colle, Colle))> = data
             .iter()
             .flat_map(|(weeks, colles)| weeks.iter().map(|week_id| (*week_id, colles.clone())))
             .collect();
@@ -143,7 +153,7 @@ impl Data {
             if short {
                 colle.id.clone()
             } else {
-                let explicit = explicit_colle_id(&colle.id).to_string();
+                let explicit = colle.explicit_id();
                 explicit
             },
             colle.jour.to_string(),
@@ -274,6 +284,25 @@ async fn mes_colles(
 }
 
 #[poise::command(slash_command)]
+async fn colles_calendrier(
+    ctx: Context<'_>,
+    #[description = "Groupe"] groupe: usize,
+) -> Result<(), Error> {
+    ctx.defer_ephemeral().await?;
+    ctx.send(
+        CreateReply::default()
+            .ephemeral(true)
+            .attachment(CreateAttachment::bytes(
+                ics_file(groupe)?,
+                format!("Calendrier de colles groupe {}.ics", groupe),
+            ))
+            .content("Importe le fichier dans ton calendrier pour y ajouter les colles !"),
+    )
+    .await?;
+    Ok(())
+}
+
+#[poise::command(slash_command)]
 async fn toutes_les_colles(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
     let handle = ctx.say(DATA.prochaines_colles_msg()).await?;
@@ -332,7 +361,12 @@ async fn main() {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![mes_colles(), toutes_les_colles(), semaine_tp()],
+            commands: vec![
+                mes_colles(),
+                toutes_les_colles(),
+                semaine_tp(),
+                colles_calendrier(),
+            ],
             ..Default::default()
         })
         .setup(|ctx, _ready, framework| {
@@ -357,6 +391,32 @@ struct Colle {
     horaire: String,
     jour: Jour,
     salle: String,
+}
+
+impl Colle {
+    fn get_start_end_time(&self) -> (u8, u8) {
+        let [start, end] = self
+            .horaire
+            .split("-")
+            .map(|s| s[..s.len() - 1].parse().unwrap())
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        (start, end)
+    }
+
+    fn explicit_id(&self) -> String {
+        let mut s = match self.id.chars().nth(0).unwrap() {
+            'M' => "Math",
+            'P' => "Physique",
+            'A' => "Anglais",
+            _ => panic!(),
+        }
+        .to_string();
+        s += " ";
+        s.extend(self.id.chars().nth(1));
+        s
+    }
 }
 
 #[derive(Debug)]
@@ -527,15 +587,54 @@ fn month_to_short_fr(month: Month) -> String {
     .to_string()
 }
 
-fn explicit_colle_id(id: &str) -> String {
-    let mut s = match id.chars().nth(0).unwrap() {
-        'M' => "Math",
-        'P' => "Physique",
-        'A' => "Anglais",
-        _ => panic!(),
+fn get_ics_date_time(date: Date, hour: u8) -> Result<String, Error> {
+    let date_time = UtcDateTime::new(date, Time::from_hms(hour, 0, 0)?);
+    let s = date_time
+        .format(&Iso8601::DATE_TIME)?
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect();
+    Ok(s)
+}
+
+fn ics_file<'a>(groupe: usize) -> Result<String, Error> {
+    let mut calendar = ICalendar::new(
+        "2.0",
+        format!("-//Wattou//Calendrier de colle groupe {}//FR", groupe),
+    );
+
+    let colles = DATA.get_sorted_data_for_group(groupe);
+    let category = Categories::new("Colles");
+
+    // create event which contains the information regarding the conference
+    for (week_id, colle) in colles {
+        let date = DATA.get_date(week_id, colle.jour);
+        let (start, end) = colle.get_start_end_time();
+        let start_date = get_ics_date_time(date, start)?;
+        let end_date = get_ics_date_time(date, end)?;
+        let mut event = Event::new(Uuid::new_v4().to_string(), start_date.clone());
+
+        event.push(Organizer::new(colle.prof.clone()));
+        event.push(DtStart::new(start_date));
+        event.push(DtEnd::new(end_date));
+        event.push(category.clone());
+        event.push(Summary::new(format!(
+            "Colle {} avec {}",
+            &colle.explicit_id(),
+            &colle.prof
+        )));
+        event.push(Description::new(format!(
+            "Colle {} avec {} en salle {} de {}",
+            &colle.explicit_id(),
+            &colle.prof,
+            &colle.salle,
+            &colle.horaire
+        )));
+        calendar.add_event(event);
     }
-    .to_string();
-    s += " ";
-    s.extend(id.chars().nth(1));
-    s
+
+    let mut writer = Vec::new();
+    // write calendar to file
+    calendar.write(&mut writer).unwrap();
+    Ok(String::from_utf8(writer).unwrap())
 }
