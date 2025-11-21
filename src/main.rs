@@ -27,11 +27,7 @@ use std::env;
 type WeekId = usize;
 
 pub fn write_to_log(s: &str) -> io::Result<()> {
-    let st = format!(
-        "{}: {}",
-        OffsetDateTime::now_local().unwrap().date().iso_week(),
-        s
-    );
+    let st = format!("{}: {}", OffsetDateTime::now_local().unwrap(), s);
     let mut f = OpenOptions::new()
         .create(true)
         .append(true)
@@ -173,11 +169,7 @@ impl Data {
                     "\n## Groupe {}{} {}",
                     i + 1,
                     if i == 9 { " (fantôme 👻)" } else { "" },
-                    self.get_sorted_data_for_group(i + 1)
-                        .iter()
-                        .map(|(week, colle)| (self.get_date(*week, colle.jour), colle))
-                        .filter(|(date, _)| *date > OffsetDateTime::now_local().unwrap().date())
-                        .collect::<Vec<_>>()[..2]
+                    DATA.get_next_colles_for_groupe(i + 1)
                         .iter()
                         .map(|(date, colle)| format!(
                             "\n- {}",
@@ -251,6 +243,16 @@ impl Data {
         }
         Ok(())
     }
+
+    fn get_next_colles_for_groupe(&self, groupe: usize) -> Vec<(Date, Colle)> {
+        self.get_sorted_data_for_group(groupe)
+            .into_iter()
+            .filter_map(|(week, colle)| {
+                let date = self.get_date(week, colle.jour);
+                (date > OffsetDateTime::now_local().unwrap().date()).then_some((date, colle))
+            })
+            .collect::<Vec<_>>()
+    }
 }
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -268,12 +270,9 @@ async fn mes_colles(
             .content(format!(
                 "Prochaines colles pour le groupe {}: \n- {}",
                 groupe,
-                Data::sort_data(&DATA.get_data_for_group(groupe))[..5]
+                DATA.get_next_colles_for_groupe(groupe)[..5]
                     .iter()
-                    .map(|(week, colle)| {
-                        let date = DATA.get_date(*week, colle.jour);
-                        DATA.day_to_string(colle, date, false)
-                    })
+                    .map(|(date, colle)| { DATA.day_to_string(colle, *date, false) })
                     .collect::<Vec<_>>()
                     .join("\n- ")
             ))
