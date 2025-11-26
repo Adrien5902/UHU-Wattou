@@ -169,7 +169,7 @@ impl Data {
                     "\n## Groupe {}{} {}",
                     i + 1,
                     if i == 9 { " (fantôme 👻)" } else { "" },
-                    DATA.get_next_colles_for_groupe(i + 1)
+                    DATA.get_next_colles_for_groupe(i + 1)[..2]
                         .iter()
                         .map(|(date, colle)| format!(
                             "\n- {}",
@@ -187,12 +187,9 @@ impl Data {
     ) -> Result<(), Error> {
         if let Some(message_res) = Data::get_message_from_file(ctx, "message").await {
             let mut message = message_res?;
-            message
-                .edit(
-                    ctx,
-                    EditMessage::new().content(self.prochaines_colles_msg()),
-                )
-                .await?;
+            let text = self.prochaines_colles_msg();
+            println!("{:?}", text);
+            message.edit(ctx, EditMessage::new().content(text)).await?;
             debug!(
                 "edited message {} in channel {} successfully",
                 message.id, message.channel_id
