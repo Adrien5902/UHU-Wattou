@@ -16,8 +16,8 @@ use std::{
     io::{self, Write},
 };
 use time::{
-    Date, Duration, Month, OffsetDateTime, Time, UtcDateTime, Weekday,
-    format_description::well_known::Iso8601, macros::format_description,
+    Date, Duration, Month, OffsetDateTime, Weekday, format_description::well_known::Iso8601,
+    macros::format_description,
 };
 use uuid::Uuid;
 
@@ -173,7 +173,7 @@ impl Data {
                         .iter()
                         .map(|(date, colle)| format!(
                             "\n- {}",
-                            self.day_to_string(colle, *date, true)
+                            self.day_to_string(colle, date.date(), true)
                         ))
                         .collect::<String>()
                 ))
@@ -188,7 +188,6 @@ impl Data {
         if let Some(message_res) = Data::get_message_from_file(ctx, "message").await {
             let mut message = message_res?;
             let text = self.prochaines_colles_msg();
-            println!("{:?}", text);
             message.edit(ctx, EditMessage::new().content(text)).await?;
             debug!(
                 "edited message {} in channel {} successfully",
@@ -241,12 +240,18 @@ impl Data {
         Ok(())
     }
 
-    fn get_next_colles_for_groupe(&self, groupe: usize) -> Vec<(Date, Colle)> {
+    fn get_next_colles_for_groupe(&self, groupe: usize) -> Vec<(OffsetDateTime, Colle)> {
         self.get_sorted_data_for_group(groupe)
             .into_iter()
             .filter_map(|(week, colle)| {
-                let date = self.get_date(week, colle.jour);
-                (date > OffsetDateTime::now_local().unwrap().date()).then_some((date, colle))
+                let date = colle
+                    .get_start_end_datetime(week)
+                    .unwrap()
+                    .get(1)
+                    .unwrap()
+                    .clone();
+
+                (date > OffsetDateTime::now_local().unwrap()).then_some((date, colle))
             })
             .collect::<Vec<_>>()
     }
@@ -269,7 +274,7 @@ async fn mes_colles(
                 groupe,
                 DATA.get_next_colles_for_groupe(groupe)[..5]
                     .iter()
-                    .map(|(date, colle)| { DATA.day_to_string(colle, *date, false) })
+                    .map(|(date, colle)| { DATA.day_to_string(colle, date.date(), false) })
                     .collect::<Vec<_>>()
                     .join("\n- ")
             ))
@@ -412,6 +417,13 @@ impl Colle {
         s += " ";
         s.extend(self.id.chars().nth(1));
         s
+    }
+
+    fn get_start_end_datetime(&self, week_id: usize) -> Result<[OffsetDateTime; 2], Error> {
+        let date = DATA.get_date(week_id, self.jour).midnight().assume_utc();
+        let (start, end) = self.get_start_end_time();
+
+        Ok([date.replace_hour(start)?, date.replace_hour(end)?])
     }
 }
 
@@ -583,16 +595,6 @@ fn month_to_short_fr(month: Month) -> String {
     .to_string()
 }
 
-fn get_ics_date_time(date: Date, hour: u8) -> Result<String, Error> {
-    let date_time = UtcDateTime::new(date, Time::from_hms(hour, 0, 0)?);
-    let s = date_time
-        .format(&Iso8601::DATE_TIME)?
-        .chars()
-        .filter(|c| c.is_alphanumeric())
-        .collect();
-    Ok(s)
-}
-
 fn ics_file<'a>(groupe: usize) -> Result<String, Error> {
     let mut calendar = ICalendar::new(
         "2.0",
@@ -604,15 +606,25 @@ fn ics_file<'a>(groupe: usize) -> Result<String, Error> {
 
     // create event which contains the information regarding the conference
     for (week_id, colle) in colles {
-        let date = DATA.get_date(week_id, colle.jour);
-        let (start, end) = colle.get_start_end_time();
-        let start_date = get_ics_date_time(date, start)?;
-        let end_date = get_ics_date_time(date, end)?;
-        let mut event = Event::new(Uuid::new_v4().to_string(), start_date.clone());
+        let [start, end] = colle
+            .get_start_end_datetime(week_id)?
+            .iter()
+            .map(|date| {
+                Ok(date
+                    .format(&Iso8601::DATE_TIME)?
+                    .chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .collect::<String>())
+            })
+            .collect::<Result<Vec<String>, Error>>()?
+            .try_into()
+            .unwrap();
+
+        let mut event = Event::new(Uuid::new_v4().to_string(), start.clone());
 
         event.push(Organizer::new(colle.prof.clone()));
-        event.push(DtStart::new(start_date));
-        event.push(DtEnd::new(end_date));
+        event.push(DtStart::new(start));
+        event.push(DtEnd::new(end));
         event.push(category.clone());
         event.push(Summary::new(format!(
             "Colle {} avec {}",
