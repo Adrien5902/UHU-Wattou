@@ -1,6 +1,11 @@
 use super::Context;
-use crate::debug;
-use crate::{colle::ColleStringFormat, group::GroupId, guild_data::GuildData};
+use crate::{
+    colle::ColleStringFormat,
+    debug,
+    group::GroupId,
+    guild_data::{GuildData, SavedData, SemaineTPMessage, ToutesLesCollesMessage},
+    subscriber::SubscriberData,
+};
 use anyhow::Result;
 use poise::CreateReply;
 use serenity::all::CreateAttachment;
@@ -65,6 +70,7 @@ pub async fn toutes_les_colles(ctx: Context<'_>) -> Result<()> {
     let handle = ctx.say(data.prochaines_colles_msg()).await?;
 
     let message = handle.message().await?;
+    ToutesLesCollesMessage::from(&message).save(data.guild_id)?;
     debug!(
         "new toutes les colles msg : {} {}",
         message.id, message.channel_id,
@@ -80,6 +86,51 @@ pub async fn semaine_tp(ctx: Context<'_>) -> Result<()> {
     let handle = ctx.say(data.semaine_tp_msg()).await?;
 
     let message = handle.message().await?;
-    debug!("new semaine tp msg : {} {}", message.id, message.channel_id,);
+    SemaineTPMessage::from(&message).save(data.guild_id)?;
+    debug!("new semaine tp msg : {} {}", message.id, message.channel_id);
+    Ok(())
+}
+
+#[poise::command(slash_command)]
+pub async fn rappel(
+    ctx: Context<'_>,
+    #[description = "Groupe de colle"]
+    #[rename = "groupe"]
+    group: usize,
+) -> Result<()> {
+    ctx.defer_ephemeral().await?;
+    let data = GuildData::from_ctx(ctx)?;
+
+    let user_id = ctx.author().id;
+    let mut subscribers = data.subscribers()?;
+    if let Some(current) = subscribers.get(&user_id) {
+        if current.group_id == group {
+            let c = current.clone();
+            subscribers.remove(data.guild_id, &user_id)?;
+
+            ctx.say(format!("Rappel désactivé")).await?;
+
+            debug!(
+                "{} unsubscribed from group reminders {:?}",
+                ctx.author().id,
+                c
+            );
+            return Ok(());
+        }
+
+        ctx.say(format!("Rappel désactivé pour le groupe {}", group))
+            .await?;
+    }
+
+    ctx.say(format!("Tu auras désormais un rappel de prendre ton carnet de colle à chaque fois que le groupe {} a colle d'anglais !\nRefais la commande pour désactiver", group)).await?;
+
+    subscribers.set(data.guild_id, user_id, SubscriberData::new_default(group))?;
+
+    debug!(
+        "{} subscribed to group reminders {}",
+        ctx.author().id,
+        group
+    );
+
     Ok(())
 }

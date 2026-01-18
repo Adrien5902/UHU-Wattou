@@ -4,13 +4,13 @@ use crate::{
     debug,
     error::{ColleParsingError, WattouError},
     group::{Group, GroupId},
-    subscriber::Subscriber,
+    subscriber::Subscribers,
     utils::{Jour, month_to_short_fr},
 };
 use anyhow::Context as _;
 use anyhow::Result;
 use serenity::all::{ChannelId, EditMessage, GuildId, Http, Message, MessageId};
-use std::{fs, num::ParseIntError, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, fs, num::ParseIntError, path::PathBuf, sync::Arc};
 use time::{Date, Duration, OffsetDateTime, Weekday, macros::format_description};
 
 pub type WeekId = usize;
@@ -24,14 +24,12 @@ pub struct GuildData {
 
 impl GuildData {
     pub const GLOBAL_DATA_FOLDER_NAME: &'static str = "data";
-    pub const FILE_NAME_SEMAINE_MESSAGE_TP: &'static str = "message_semaine_tp";
-    pub const FILE_NAME_COLLES_MESSAGE: &'static str = "message_colles";
     pub const FILE_NAME_GHOSTS_GROUPS: &'static str = "ghosts";
     pub const FILE_NAME_COLLE_LIST: &'static str = "colles";
     pub const FILE_NAME_WEEKS_INFO: &'static str = "weeks";
     pub const FILE_NAME_COLLOSCOPE: &'static str = "colloscope";
 
-    fn new(guild_id: GuildId) -> Result<Self> {
+    fn new(guild_id: GuildId) -> Result<Arc<Self>> {
         if !fs::exists(Self::folder(guild_id))? {
             Err(WattouError::NoDataForGuild(guild_id))?
         }
@@ -41,24 +39,30 @@ impl GuildData {
         let groups = Self::read_groups_data(guild_id)?;
         let ghosts = Self::read_ghost_groups(guild_id)?;
 
-        debug!("Parsed data for guild {}", guild_id);
-
-        Ok(Self {
+        let arc = Arc::new(Self {
             guild_id,
             groups,
             ghosts,
-        })
+        });
+
+        GLOBAL_DATA.lock().unwrap().guilds_data.push(arc.clone());
+
+        debug!("Parsed data for guild {}", guild_id);
+
+        Ok(arc)
     }
 
     pub fn get_from_id(id: GuildId) -> Result<Arc<Self>> {
-        let lock = GLOBAL_DATA;
-        let mut data = lock.lock().unwrap();
-
-        if let Some(arc) = data.guilds_data.iter().find(|d| d.guild_id == id) {
+        if let Some(arc) = GLOBAL_DATA
+            .lock()
+            .unwrap()
+            .guilds_data
+            .iter()
+            .find(|d| d.guild_id == id)
+        {
             return Ok(arc.clone());
         } else {
-            let guild_data = Arc::new(Self::new(id)?);
-            data.guilds_data.push(guild_data.clone());
+            let guild_data = Self::new(id)?;
             return Ok(guild_data);
         }
     }
@@ -68,6 +72,10 @@ impl GuildData {
             .guild_id()
             .ok_or(WattouError::CommandCanOnlyBeUsedInGuilds)?;
         Ok(Self::get_from_id(guild_id)?)
+    }
+
+    pub fn subscribers(&self) -> Result<Subscribers> {
+        Subscribers::read_or_default(self.guild_id)
     }
 
     pub fn global_folder() -> PathBuf {
@@ -188,27 +196,6 @@ impl GuildData {
             .next_occurrence(jour.inner())
     }
 
-    pub fn read_message_and_channel_id<'a>(
-        &self,
-        file_name: impl Into<&'a str>,
-    ) -> Result<(u64, u64)> {
-        let file = Self::read_text_for_guild(self.guild_id, file_name)?;
-
-        let mut lines = file.lines();
-
-        let v = (|| Some((lines.next()?.parse().ok()?, lines.next()?.parse().ok()?)))()
-            .ok_or(WattouError::MessageParsingFailed)?;
-
-        Ok(v)
-    }
-
-    pub async fn get_message_from_file(&self, http: &Http, file_name: &str) -> Result<Message> {
-        let (message_id, channel_id) = self.read_message_and_channel_id(file_name)?;
-
-        let channel = ChannelId::new(channel_id);
-        Ok(channel.message(http, MessageId::new(message_id)).await?)
-    }
-
     pub fn prochaines_colles_msg(&self) -> String {
         format!(
             "# Prochaines colles: {}",
@@ -236,9 +223,8 @@ impl GuildData {
     }
 
     pub async fn edit_toutes_les_colles_msg(&self, http: &Http) -> Result<()> {
-        let mut message = self
-            .get_message_from_file(http, Self::FILE_NAME_COLLES_MESSAGE)
-            .await?;
+        let (message_id, channel_id) = ToutesLesCollesMessage::read(self.guild_id)?.0;
+        let mut message = http.get_message(channel_id, message_id).await?;
 
         let text = self.prochaines_colles_msg();
         message.edit(http, EditMessage::new().content(text)).await?;
@@ -280,9 +266,8 @@ impl GuildData {
     }
 
     pub async fn edit_semaine_tp_msg(&self, http: &Http) -> Result<()> {
-        let mut message = self
-            .get_message_from_file(http, Self::FILE_NAME_SEMAINE_MESSAGE_TP)
-            .await?;
+        let (message_id, channel_id) = SemaineTPMessage::read(self.guild_id)?.0;
+        let mut message = http.get_message(channel_id, message_id).await?;
 
         message
             .edit(http, EditMessage::new().content(self.semaine_tp_msg()))
@@ -304,3 +289,70 @@ impl GuildData {
             .ok_or(WattouError::GroupNotFound)?)
     }
 }
+
+pub trait SavedData: Sized {
+    const FILE_NAME: &'static str;
+
+    fn ser(&self) -> String;
+    fn de(value: &str) -> Result<Self>;
+
+    fn read<'a>(guild_id: GuildId) -> Result<Self> {
+        Self::de(&GuildData::read_text_for_guild(guild_id, Self::FILE_NAME)?)
+    }
+
+    fn save<'a>(&self, guild_id: GuildId) -> Result<()> {
+        let path = GuildData::get_file_path(guild_id, Self::FILE_NAME);
+        fs::write(path, self.ser())?;
+        Ok(())
+    }
+
+    fn exists(guild_id: GuildId) -> Result<bool> {
+        Ok(fs::exists(GuildData::get_file_path(
+            guild_id,
+            Subscribers::FILE_NAME,
+        ))?)
+    }
+}
+
+pub trait SavedDataWithDefault: SavedData + Default {
+    fn read_or_default(guild_id: GuildId) -> Result<Self> {
+        if Self::exists(guild_id)? {
+            Self::read(guild_id)
+        } else {
+            Ok(Self::default())
+        }
+    }
+}
+
+pub struct RecurrentMessage<const ID: usize>((MessageId, ChannelId));
+
+impl<const ID: usize> RecurrentMessage<ID> {
+    const IDS: [&'static str; 2] = ["message_semaine_tp", "message_colles"];
+}
+
+impl<const ID: usize> SavedData for RecurrentMessage<ID> {
+    const FILE_NAME: &'static str = Self::IDS[ID];
+
+    fn de(s: &str) -> Result<Self> {
+        let mut lines = s.lines();
+
+        let (message_id, channel_id) =
+            (|| Some((lines.next()?.parse().ok()?, lines.next()?.parse().ok()?)))()
+                .ok_or(WattouError::MessageParsingFailed)?;
+
+        Ok(Self((message_id, channel_id)))
+    }
+
+    fn ser(&self) -> String {
+        [self.0.0.to_string(), self.0.1.to_string()].join("\n")
+    }
+}
+
+impl<const ID: usize> From<&Cow<'_, Message>> for RecurrentMessage<ID> {
+    fn from(value: &Cow<'_, Message>) -> Self {
+        Self((value.id, value.channel_id))
+    }
+}
+
+pub type SemaineTPMessage = RecurrentMessage<0>;
+pub type ToutesLesCollesMessage = RecurrentMessage<1>;

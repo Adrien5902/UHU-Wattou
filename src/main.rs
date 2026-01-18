@@ -10,7 +10,7 @@ pub mod subscriber;
 pub mod utils;
 
 use crate::{
-    commands::{colles_calendrier, mes_colles, semaine_tp, toutes_les_colles},
+    commands::{colles_calendrier, mes_colles, rappel, semaine_tp, toutes_les_colles},
     error::WattouError,
     guild_data::GuildData,
     prof::Prof,
@@ -94,6 +94,7 @@ async fn main() -> Result<()> {
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
+                rappel(),
                 mes_colles(),
                 toutes_les_colles(),
                 semaine_tp(),
