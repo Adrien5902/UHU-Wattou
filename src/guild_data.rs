@@ -31,7 +31,7 @@ impl GuildData {
     pub const FILE_NAME_WEEKS_INFO: &'static str = "weeks";
     pub const FILE_NAME_COLLOSCOPE: &'static str = "colloscope";
 
-    pub fn new(guild_id: GuildId) -> Result<Self> {
+    fn new(guild_id: GuildId) -> Result<Self> {
         if !fs::exists(Self::folder(guild_id))? {
             Err(WattouError::NoDataForGuild(guild_id))?
         }
@@ -78,9 +78,12 @@ impl GuildData {
         Self::global_folder().join(id.to_string())
     }
 
-    pub fn read_text_for_guild(id: GuildId, file: impl Into<String>) -> Result<String> {
-        let path = Self::folder(id).join(file.into());
+    pub fn get_file_path<'a>(id: GuildId, file: impl Into<&'a str>) -> PathBuf {
+        Self::folder(id).join(file.into())
+    }
 
+    pub fn read_text_for_guild<'a>(id: GuildId, file: impl Into<&'a str>) -> Result<String> {
+        let path = Self::get_file_path(id, file);
         Ok(fs::read_to_string(&path)
             .with_context(|| format!("Failed to read file {}", path.to_str().unwrap()))?)
     }
@@ -159,7 +162,11 @@ impl GuildData {
                         Ok(colles)
                     })
                     .collect::<Result<Vec<Vec<Colle>>>>()
-                    .map(|inner| inner.into_iter().flatten().collect::<Vec<Colle>>())
+                    .map(|inner| {
+                        let mut colles = inner.into_iter().flatten().collect::<Vec<Colle>>();
+                        colles.sort();
+                        colles
+                    })
             })
             .collect::<Result<_>>()?;
 
@@ -181,7 +188,10 @@ impl GuildData {
             .next_occurrence(jour.inner())
     }
 
-    pub fn read_message_and_channel_id(&self, file_name: impl Into<String>) -> Result<(u64, u64)> {
+    pub fn read_message_and_channel_id<'a>(
+        &self,
+        file_name: impl Into<&'a str>,
+    ) -> Result<(u64, u64)> {
         let file = Self::read_text_for_guild(self.guild_id, file_name)?;
 
         let mut lines = file.lines();

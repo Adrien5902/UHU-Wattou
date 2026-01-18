@@ -10,12 +10,12 @@ pub mod subscriber;
 pub mod utils;
 
 use crate::{
-    commands::{colles_calendrier, mes_colles, rappel, semaine_tp, toutes_les_colles},
+    commands::{colles_calendrier, mes_colles, semaine_tp, toutes_les_colles},
     error::WattouError,
     guild_data::GuildData,
     prof::Prof,
 };
-use anyhow::{Error, Result, bail};
+use anyhow::{Error, Result};
 use dotenv::dotenv;
 use once_cell::sync::Lazy;
 use serenity::{
@@ -54,7 +54,7 @@ impl EventHandler for Handler {
         }));
 
         if let Err(e) = refresh_messages(&ctx.http).await {
-            debug!("Error: {:?}", e);
+            debug!("Error : {:?}", e);
         }
     }
 
@@ -94,7 +94,6 @@ async fn main() -> Result<()> {
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
-                rappel(),
                 mes_colles(),
                 toutes_les_colles(),
                 semaine_tp(),
