@@ -1,21 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
+#![allow(async_fn_in_trait)]
 pub mod colle;
 pub mod commands;
 pub mod error;
 pub mod group;
 pub mod guild_data;
 pub mod prof;
+pub mod recurrent_message;
 pub mod subscriber;
 pub mod utils;
 
-use crate::{
-    commands::{colles_calendrier, mes_colles, rappel, semaine_tp, toutes_les_colles},
-    error::WattouError,
-    guild_data::GuildData,
-    prof::Prof,
-};
-use anyhow::{Error, Result};
+use crate::{error::WattouError, guild_data::GuildData, prof::Prof};
+use color_eyre::{Result, eyre::Report};
 use dotenv::dotenv;
 use once_cell::sync::Lazy;
 use serenity::{
@@ -28,7 +24,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-type Context<'a> = poise::Context<'a, Arc<Mutex<GlobalData>>, Error>;
+type Context<'a> = poise::Context<'a, Arc<Mutex<GlobalData>>, Report>;
 
 #[derive(Default)]
 pub struct GlobalData {
@@ -36,7 +32,7 @@ pub struct GlobalData {
     pub profs: Vec<Arc<Prof>>,
 }
 
-const GLOBAL_DATA: Lazy<Arc<Mutex<GlobalData>>> =
+static GLOBAL_DATA: Lazy<Arc<Mutex<GlobalData>>> =
     Lazy::new(|| Arc::new(Mutex::new(GlobalData::default())));
 
 struct Handler;
@@ -64,13 +60,14 @@ impl EventHandler for Handler {
     }
 }
 
-async fn refresh_messages(http: &Http) -> anyhow::Result<()> {
+async fn refresh_messages(http: &Http) -> color_eyre::Result<()> {
     let guilds = http.get_guilds(None, None).await?;
     for guild in guilds {
         match GuildData::get_from_id(guild.id) {
             Ok(guild_data) => {
-                guild_data.edit_toutes_les_colles_msg(&http).await?;
+                guild_data.try_edit_toutes_les_colles_msg(&http).await?;
                 guild_data.edit_semaine_tp_msg(&http).await?;
+                guild_data.refresh_subscribers_message(&http).await?;
             }
             Err(e) => {
                 if !e.is::<WattouError>()
@@ -88,17 +85,19 @@ async fn refresh_messages(http: &Http) -> anyhow::Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    color_eyre::install()?;
     dotenv().ok();
     let token = env::var("DISCORD_TOKEN").expect("Missing DISCORD_TOKEN");
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
-                rappel(),
-                mes_colles(),
-                toutes_les_colles(),
-                semaine_tp(),
-                colles_calendrier(),
+                commands::clear(),
+                commands::rappel(),
+                commands::mes_colles(),
+                commands::toutes_les_colles(),
+                commands::semaine_tp(),
+                commands::colles_calendrier(),
             ],
             ..Default::default()
         })

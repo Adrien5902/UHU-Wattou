@@ -2,7 +2,7 @@ use crate::GLOBAL_DATA;
 use crate::error::{ColleParsingError, WattouError};
 use crate::prof::Prof;
 use crate::utils::{Jour, month_to_short_fr};
-use anyhow::{Error, Result};
+use color_eyre::{Result, eyre};
 use ics::Event;
 use ics::properties::{Categories, Description, DtEnd, DtStart, Organizer, Summary};
 use once_cell::sync::Lazy;
@@ -16,10 +16,10 @@ use uuid::Uuid;
 
 /// e.g. : M4 (Maths n°4)
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct ColleId(char, u8);
+pub struct ColleId(pub char, pub u8);
 
 impl FromStr for ColleId {
-    type Err = Error;
+    type Err = eyre::Report;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut chars = s.chars();
         let c = chars.next().ok_or(WattouError::ColleParsingFailed(
@@ -67,6 +67,12 @@ pub struct Colle {
     pub end: OffsetDateTime,
 }
 
+impl ToString for Colle {
+    fn to_string(&self) -> String {
+        self.format(ColleStringFormat::Explicit)
+    }
+}
+
 impl Colle {
     pub fn horaire(&self) -> String {
         let format = format_description!("[hour]h");
@@ -75,7 +81,7 @@ impl Colle {
             .join("-")
     }
 
-    pub fn to_string(&self, format: ColleStringFormat) -> String {
+    pub fn format(&self, format: ColleStringFormat) -> String {
         format!(
             "{}: {} {} {} {} avec {} en {}",
             match format {
@@ -166,7 +172,7 @@ impl Colle {
                     .filter(|c| c.is_alphanumeric())
                     .collect::<String>())
             })
-            .collect::<Result<Vec<String>, Error>>()?
+            .collect::<Result<Vec<String>, eyre::Report>>()?
             .try_into()
             .unwrap();
 

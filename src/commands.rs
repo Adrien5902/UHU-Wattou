@@ -3,10 +3,11 @@ use crate::{
     colle::ColleStringFormat,
     debug,
     group::GroupId,
-    guild_data::{GuildData, SavedData, SemaineTPMessage, ToutesLesCollesMessage},
+    guild_data::{GuildData, SavedData},
+    recurrent_message::{SemaineTPMessage, ToutesLesCollesMessage},
     subscriber::SubscriberData,
 };
-use anyhow::Result;
+use color_eyre::Result;
 use poise::CreateReply;
 use serenity::all::CreateAttachment;
 
@@ -30,7 +31,7 @@ pub async fn mes_colles(
                 group
                     .get_next_colles(5)
                     .iter()
-                    .map(|colle| colle.to_string(ColleStringFormat::Explicit))
+                    .map(|colle| colle.format(ColleStringFormat::Explicit))
                     .collect::<Vec<_>>()
                     .join("\n- ")
             ))
@@ -131,6 +132,23 @@ pub async fn rappel(
         ctx.author().id,
         group
     );
+
+    Ok(())
+}
+
+#[poise::command(slash_command)]
+pub async fn clear(ctx: Context<'_>, limit: u8) -> Result<()> {
+    ctx.defer_ephemeral().await?;
+    let messages = ctx
+        .http()
+        .get_messages(ctx.channel_id(), None, Some(limit))
+        .await?;
+
+    for message in messages {
+        message.delete(ctx).await?;
+    }
+
+    ctx.say(format!("{} messages supprimé(s)", limit)).await?;
 
     Ok(())
 }

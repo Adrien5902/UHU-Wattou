@@ -4,13 +4,13 @@ use crate::{
     debug,
     error::{ColleParsingError, WattouError},
     group::{Group, GroupId},
-    subscriber::Subscribers,
+    recurrent_message::{SemaineTPMessage, ToutesLesCollesMessage},
+    subscriber::{SubscribePlan, Subscribers},
     utils::{Jour, month_to_short_fr},
 };
-use anyhow::Context as _;
-use anyhow::Result;
-use serenity::all::{ChannelId, EditMessage, GuildId, Http, Message, MessageId};
-use std::{borrow::Cow, fs, num::ParseIntError, path::PathBuf, sync::Arc};
+use color_eyre::Result;
+use serenity::all::{GuildId, Http};
+use std::{fs, num::ParseIntError, path::PathBuf, sync::Arc};
 use time::{Date, Duration, OffsetDateTime, Weekday, macros::format_description};
 
 pub type WeekId = usize;
@@ -92,8 +92,7 @@ impl GuildData {
 
     pub fn read_text_for_guild<'a>(id: GuildId, file: impl Into<&'a str>) -> Result<String> {
         let path = Self::get_file_path(id, file);
-        Ok(fs::read_to_string(&path)
-            .with_context(|| format!("Failed to read file {}", path.to_str().unwrap()))?)
+        Ok(fs::read_to_string(&path)?)
     }
 
     pub fn read_groups_data(guild_id: GuildId) -> Result<Vec<Group>> {
@@ -214,7 +213,7 @@ impl GuildData {
                         .iter()
                         .map(|colle| format!(
                             "\n- {}",
-                            colle.to_string(crate::colle::ColleStringFormat::Implicit)
+                            colle.format(crate::colle::ColleStringFormat::Implicit)
                         ))
                         .collect::<String>()
                 ))
@@ -222,17 +221,10 @@ impl GuildData {
         )
     }
 
-    pub async fn edit_toutes_les_colles_msg(&self, http: &Http) -> Result<()> {
-        let (message_id, channel_id) = ToutesLesCollesMessage::read(self.guild_id)?.0;
-        let mut message = http.get_message(channel_id, message_id).await?;
-
-        let text = self.prochaines_colles_msg();
-        message.edit(http, EditMessage::new().content(text)).await?;
-        debug!(
-            "edited message {} in channel {} successfully",
-            message.id, message.channel_id
-        );
-
+    pub async fn try_edit_toutes_les_colles_msg(&self, http: &Http) -> Result<()> {
+        if let Some(message) = ToutesLesCollesMessage::read(self.guild_id) {
+            message?.edit(http, self.prochaines_colles_msg()).await?;
+        }
         Ok(())
     }
 
@@ -266,18 +258,9 @@ impl GuildData {
     }
 
     pub async fn edit_semaine_tp_msg(&self, http: &Http) -> Result<()> {
-        let (message_id, channel_id) = SemaineTPMessage::read(self.guild_id)?.0;
-        let mut message = http.get_message(channel_id, message_id).await?;
-
-        message
-            .edit(http, EditMessage::new().content(self.semaine_tp_msg()))
-            .await?;
-
-        debug!(
-            "edited message {} in channel {} successfully",
-            message.id, message.channel_id
-        );
-
+        if let Some(message) = SemaineTPMessage::read(self.guild_id) {
+            message?.edit(http, self.semaine_tp_msg()).await?;
+        }
         Ok(())
     }
 
@@ -288,6 +271,16 @@ impl GuildData {
             .find(|g| g.id == group_id)
             .ok_or(WattouError::GroupNotFound)?)
     }
+
+    pub async fn refresh_subscribers_message(&self, http: &Http) -> Result<()> {
+        let subs = self.subscribers()?;
+
+        for (user_id, data) in subs.iter() {
+            data.try_send(*user_id, http, &self).await?;
+        }
+
+        Ok(())
+    }
 }
 
 pub trait SavedData: Sized {
@@ -296,8 +289,21 @@ pub trait SavedData: Sized {
     fn ser(&self) -> String;
     fn de(value: &str) -> Result<Self>;
 
-    fn read<'a>(guild_id: GuildId) -> Result<Self> {
-        Self::de(&GuildData::read_text_for_guild(guild_id, Self::FILE_NAME)?)
+    /// Returns [None] if no data found, returns [Some(Err())] if parsing or read failed
+    fn read(guild_id: GuildId) -> Option<Result<Self>> {
+        let exists = match fs::exists(GuildData::get_file_path(guild_id, Self::FILE_NAME)) {
+            Ok(v) => v,
+            Err(e) => return Some(Err(e.into())),
+        };
+
+        if !exists {
+            return None;
+        }
+
+        Some((|| {
+            let data = GuildData::read_text_for_guild(guild_id, Self::FILE_NAME)?;
+            Self::de(&data)
+        })())
     }
 
     fn save<'a>(&self, guild_id: GuildId) -> Result<()> {
@@ -316,43 +322,8 @@ pub trait SavedData: Sized {
 
 pub trait SavedDataWithDefault: SavedData + Default {
     fn read_or_default(guild_id: GuildId) -> Result<Self> {
-        if Self::exists(guild_id)? {
-            Self::read(guild_id)
-        } else {
-            Ok(Self::default())
-        }
+        Self::read(guild_id).unwrap_or(Ok(Self::default()))
     }
 }
 
-pub struct RecurrentMessage<const ID: usize>((MessageId, ChannelId));
-
-impl<const ID: usize> RecurrentMessage<ID> {
-    const IDS: [&'static str; 2] = ["message_semaine_tp", "message_colles"];
-}
-
-impl<const ID: usize> SavedData for RecurrentMessage<ID> {
-    const FILE_NAME: &'static str = Self::IDS[ID];
-
-    fn de(s: &str) -> Result<Self> {
-        let mut lines = s.lines();
-
-        let (message_id, channel_id) =
-            (|| Some((lines.next()?.parse().ok()?, lines.next()?.parse().ok()?)))()
-                .ok_or(WattouError::MessageParsingFailed)?;
-
-        Ok(Self((message_id, channel_id)))
-    }
-
-    fn ser(&self) -> String {
-        [self.0.0.to_string(), self.0.1.to_string()].join("\n")
-    }
-}
-
-impl<const ID: usize> From<&Cow<'_, Message>> for RecurrentMessage<ID> {
-    fn from(value: &Cow<'_, Message>) -> Self {
-        Self((value.id, value.channel_id))
-    }
-}
-
-pub type SemaineTPMessage = RecurrentMessage<0>;
-pub type ToutesLesCollesMessage = RecurrentMessage<1>;
+impl<T> SavedDataWithDefault for T where T: SavedData + Default {}

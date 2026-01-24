@@ -1,5 +1,5 @@
 use crate::colle::Colle;
-use anyhow::Result;
+use color_eyre::Result;
 use ics::ICalendar;
 use serenity::all::GuildId;
 use time::OffsetDateTime;
