@@ -122,7 +122,7 @@ pub trait SubscribePlan: Debug {
 }
 
 impl SubscriberData {
-    const MIN_HOUR_DIFF: u64 = 24;
+    const MIN_HOUR_DIFF: u64 = 30;
 }
 
 impl SubscribePlan for SubscriberData {
