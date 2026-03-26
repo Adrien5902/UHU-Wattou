@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::Context;
 use crate::{
     colle::ColleStringFormat,
@@ -31,7 +33,7 @@ pub async fn mes_colles(
                 group
                     .get_next_colles(5)
                     .iter()
-                    .map(|colle| colle.format(ColleStringFormat::Explicit))
+                    .map(|colle| colle.format(ColleStringFormat::Explicit, vec![]))
                     .collect::<Vec<_>>()
                     .join("\n- ")
             ))
@@ -151,4 +153,70 @@ pub async fn clear(ctx: Context<'_>, limit: u8) -> Result<()> {
     ctx.say(format!("{} messages supprimé(s)", limit)).await?;
 
     Ok(())
+}
+
+#[poise::command(slash_command)]
+pub async fn colles_de_prof(
+    ctx: Context<'_>,
+    #[rename = "prof"]
+    #[autocomplete = "autocomplete_prof"]
+    prof_str: String,
+    #[rename = "limite"] limit: Option<usize>,
+) -> Result<()> {
+    ctx.defer_ephemeral().await?;
+    let limit = limit.and_then(|l| (l < 100).then_some(l)).unwrap_or(5);
+    let data = GuildData::from_ctx(ctx)?;
+
+    let Some(prof) = ctx
+        .data()
+        .lock()
+        .unwrap()
+        .profs
+        .get(&Arc::from(prof_str))
+        .map(|p| p.clone())
+    else {
+        todo!("impl error");
+    };
+
+    ctx.send(
+        CreateReply::default()
+            .ephemeral(true)
+            .content(format!(
+                "Prochaines colles pour {}: \n- {}",
+                prof.name(),
+                prof.get_next_colles_in_guild(data, limit)
+                    .iter()
+                    .map(|(groupe_id, colle)| colle
+                        .format(ColleStringFormat::ForProf, vec![groupe_id.to_string()]))
+                    .collect::<Vec<_>>()
+                    .join("\n- ")
+            ))
+            .reply(true),
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub async fn autocomplete_prof(ctx: Context<'_>, partial: &str) -> Vec<String> {
+    let input = easy_comp_string(partial);
+    ctx.data()
+        .lock()
+        .unwrap()
+        .profs
+        .iter()
+        .filter_map(|(_, p)| {
+            let name = p.name();
+            easy_comp_string(name)
+                .contains(&input)
+                .then_some(name.to_owned())
+        })
+        .collect::<Vec<_>>()
+}
+
+fn easy_comp_string(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect::<String>()
+        .to_lowercase()
 }

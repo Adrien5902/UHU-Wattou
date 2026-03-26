@@ -15,11 +15,12 @@ use color_eyre::{Result, eyre::Report};
 use dotenv::dotenv;
 use once_cell::sync::Lazy;
 use serenity::{
-    all::{Http, Interaction, Ready},
+    all::{GuildId, Http, Interaction, Ready},
     async_trait,
     prelude::*,
 };
 use std::{
+    collections::HashMap,
     env,
     sync::{Arc, Mutex},
 };
@@ -28,8 +29,8 @@ type Context<'a> = poise::Context<'a, Arc<Mutex<GlobalData>>, Report>;
 
 #[derive(Default)]
 pub struct GlobalData {
-    pub guilds_data: Vec<Arc<GuildData>>,
-    pub profs: Vec<Arc<Prof>>,
+    pub guilds_data: HashMap<GuildId, Arc<GuildData>>,
+    pub profs: HashMap<Arc<str>, Arc<Prof>>,
 }
 
 static GLOBAL_DATA: Lazy<Arc<Mutex<GlobalData>>> =
@@ -55,8 +56,9 @@ impl EventHandler for Handler {
     }
 
     async fn interaction_create(&self, _ctx: serenity::prelude::Context, interaction: Interaction) {
-        let command = interaction.as_command().unwrap();
-        debug!("{} executed command {}", command.user.id, command.data.name);
+        if let Some(command) = interaction.as_command() {
+            debug!("{} executed command {}", command.user.id, command.data.name);
+        }
     }
 }
 
@@ -93,6 +95,7 @@ async fn main() -> Result<()> {
         .options(poise::FrameworkOptions {
             commands: vec![
                 commands::clear(),
+                commands::colles_de_prof(),
                 commands::rappel(),
                 commands::mes_colles(),
                 commands::toutes_les_colles(),

@@ -69,7 +69,7 @@ pub struct Colle {
 
 impl ToString for Colle {
     fn to_string(&self) -> String {
-        self.format(ColleStringFormat::Explicit)
+        self.format(ColleStringFormat::Explicit, vec![])
     }
 }
 
@@ -81,18 +81,21 @@ impl Colle {
             .join("-")
     }
 
-    pub fn format(&self, format: ColleStringFormat) -> String {
+    pub fn format(&self, format: ColleStringFormat, context: Vec<String>) -> String {
         format!(
             "{}: {} {} {} {} avec {} en {}",
             match format {
                 ColleStringFormat::Explicit => self.id.explicit(),
-                ColleStringFormat::Implicit => self.id.to_string(),
+                ColleStringFormat::Implicit | ColleStringFormat::ForProf => self.id.to_string(),
             },
             Jour::from(self.start.weekday()).to_string(),
             self.start.day(),
             month_to_short_fr(self.start.month()),
             self.horaire(),
-            self.prof.to_string(),
+            match format {
+                ColleStringFormat::ForProf => format!("le groupe {} ", context[0]),
+                _ => self.prof.to_string(),
+            },
             self.room
         )
     }
@@ -132,18 +135,17 @@ impl Colle {
         let jour = Jour::from(jour_str);
 
         let prof_str = words_vec.join(" ");
+        let arc_str = Arc::from(prof_str);
 
-        let prof = if let Some(arc) = GLOBAL_DATA
-            .lock()
-            .unwrap()
-            .profs
-            .iter()
-            .find(|p| p.name() == prof_str)
-        {
+        let prof = if let Some(arc) = GLOBAL_DATA.lock().unwrap().profs.get(&arc_str) {
             arc.clone()
         } else {
-            let arc = Arc::new(Prof::new(prof_str));
-            GLOBAL_DATA.lock().unwrap().profs.push(arc.clone());
+            let arc = Arc::new(Prof::new(arc_str.clone()));
+            GLOBAL_DATA
+                .lock()
+                .unwrap()
+                .profs
+                .insert(arc_str, arc.clone());
             arc
         };
 
@@ -162,7 +164,7 @@ impl Colle {
         })
     }
 
-    pub fn to_ics_event(&self) -> Result<Event> {
+    pub fn to_ics_event(&self) -> Result<Event<'_>> {
         let [start, end]: [String; 2] = [self.start, self.end]
             .iter()
             .map(|date| {
@@ -213,6 +215,7 @@ impl Ord for Colle {
 }
 
 pub enum ColleStringFormat {
+    ForProf,
     Implicit,
     Explicit,
 }

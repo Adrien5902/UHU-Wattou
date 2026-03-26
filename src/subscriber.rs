@@ -147,7 +147,7 @@ impl SubscribePlan for SubscriberData {
         Ok(format!(
             "{}, n'oublie pas ton carnet de colle pour ta colle {}",
             Mention::from(user_id),
-            predicate.format(crate::colle::ColleStringFormat::Explicit)
+            predicate.format(crate::colle::ColleStringFormat::Explicit, vec![])
         ))
     }
 }

@@ -45,7 +45,11 @@ impl GuildData {
             ghosts,
         });
 
-        GLOBAL_DATA.lock().unwrap().guilds_data.push(arc.clone());
+        GLOBAL_DATA
+            .lock()
+            .unwrap()
+            .guilds_data
+            .insert(guild_id, arc.clone());
 
         debug!("Parsed data for guild {}", guild_id);
 
@@ -53,13 +57,7 @@ impl GuildData {
     }
 
     pub fn get_from_id(id: GuildId) -> Result<Arc<Self>> {
-        if let Some(arc) = GLOBAL_DATA
-            .lock()
-            .unwrap()
-            .guilds_data
-            .iter()
-            .find(|d| d.guild_id == id)
-        {
+        if let Some(arc) = GLOBAL_DATA.lock().unwrap().guilds_data.get(&id) {
             return Ok(arc.clone());
         } else {
             let guild_data = Self::new(id)?;
@@ -213,7 +211,7 @@ impl GuildData {
                         .iter()
                         .map(|colle| format!(
                             "\n- {}",
-                            colle.format(crate::colle::ColleStringFormat::Implicit)
+                            colle.format(crate::colle::ColleStringFormat::Implicit, vec![])
                         ))
                         .collect::<String>()
                 ))
