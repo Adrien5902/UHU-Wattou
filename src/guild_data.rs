@@ -201,7 +201,7 @@ impl GuildData {
             self.groups
                 .iter()
                 .map(|group| format!(
-                    "\n### Groupe {}{} {}",
+                    "\nGroupe {}{} {}",
                     group.id,
                     if self.ghosts.contains(&group.id) {
                         " (fantôme 👻)"
@@ -249,7 +249,7 @@ impl GuildData {
         }
 
         format!(
-            "Mercredi prochain ({} {}) le group 1 commence par {} et le group 2 par {}",
+            "Mercredi prochain ({} {}) le groupe 1 commence par {} et le groupe 2 par {}",
             date.day(),
             month_to_short_fr(date.month()),
             grp1,
