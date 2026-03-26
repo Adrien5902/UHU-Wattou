@@ -1,5 +1,5 @@
 use crate::{debug, error::WattouError, guild_data::SavedData};
-use color_eyre::Result;
+use color_eyre::{Result, eyre::Context};
 use serenity::all::{ChannelId, EditMessage, Http, Message, MessageId};
 use std::borrow::Cow;
 
@@ -13,12 +13,13 @@ impl<const ID: usize> RecurrentMessage<ID> {
     }
 
     pub async fn edit(&self, http: &Http, content: impl Into<String>) -> Result<()> {
+        let content_str = content.into();
         let (message_id, channel_id) = self.inner();
         let mut message = http.get_message(channel_id, message_id).await?;
 
         message
-            .edit(http, EditMessage::new().content(content.into()))
-            .await?;
+            .edit(http, EditMessage::new().content(content_str.clone()))
+            .await.with_context(move || content_str)?;
 
         debug!(
             "edited message {} in channel {} successfully",
