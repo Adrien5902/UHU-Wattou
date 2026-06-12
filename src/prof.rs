@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
-use time::OffsetDateTime;
-
 use crate::{colle::Colle, group::GroupId, guild_data::GuildData};
+use std::sync::Arc;
+use time::OffsetDateTime;
 
 #[derive(Debug, Clone)]
 pub struct Prof {

@@ -1,17 +1,20 @@
-use crate::GLOBAL_DATA;
-use crate::error::{ColleParsingError, WattouError};
-use crate::prof::Prof;
-use crate::utils::{Jour, month_to_short_fr};
+use crate::{
+    GLOBAL_DATA,
+    error::{ColleParsingError, WattouError},
+    group::GroupId,
+    prof::Prof,
+    utils::{Jour, month_to_short_fr},
+};
 use color_eyre::{Result, eyre};
-use ics::Event;
-use ics::properties::{Categories, Description, DtEnd, DtStart, Organizer, Summary};
+use ics::{
+    Event,
+    properties::{Categories, Description, DtEnd, DtStart, Organizer, Summary},
+};
 use once_cell::sync::Lazy;
-use std::cmp::Ordering;
-use std::str::FromStr;
-use std::sync::Arc;
-use time::format_description::well_known::Iso8601;
-use time::macros::format_description;
-use time::{Date, OffsetDateTime};
+use std::{cmp::Ordering, fmt::Write, str::FromStr, sync::Arc};
+use time::{
+    Date, OffsetDateTime, format_description::well_known::Iso8601, macros::format_description,
+};
 use uuid::Uuid;
 
 /// e.g. : M4 (Maths n°4)
@@ -21,7 +24,8 @@ pub struct ColleId(pub char, pub u8);
 impl FromStr for ColleId {
     type Err = eyre::Report;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut chars = s.chars();
+        let chars = s.chars();
+        let mut chars = chars;
         let c = chars.next().ok_or(WattouError::ColleParsingFailed(
             ColleParsingError::IdParsingFailed,
         ))?;
@@ -67,12 +71,6 @@ pub struct Colle {
     pub end: OffsetDateTime,
 }
 
-impl ToString for Colle {
-    fn to_string(&self) -> String {
-        self.format(ColleStringFormat::Explicit, vec![])
-    }
-}
-
 impl Colle {
     pub fn horaire(&self) -> String {
         let format = format_description!("[hour]h");
@@ -81,23 +79,27 @@ impl Colle {
             .join("-")
     }
 
-    pub fn format(&self, format: ColleStringFormat, context: Vec<String>) -> String {
-        format!(
+    pub fn format<F>(&self, mut f: F, format: ColleStringFormat) -> Result<()>
+    where
+        F: Write,
+    {
+        f.write_fmt(format_args!(
             "{}: {} {} {} {} avec {} en {}",
             match format {
                 ColleStringFormat::Explicit => self.id.explicit(),
-                ColleStringFormat::Implicit | ColleStringFormat::ForProf => self.id.to_string(),
+                ColleStringFormat::Implicit | ColleStringFormat::ForProf(_) => self.id.to_string(),
             },
             Jour::from(self.start.weekday()).to_string(),
-            self.start.day(),
+            self.start.day().to_string(),
             month_to_short_fr(self.start.month()),
             self.horaire(),
             match format {
-                ColleStringFormat::ForProf => format!("le groupe {} ", context[0]),
+                ColleStringFormat::ForProf(group) => format!("le groupe {} ", group),
                 _ => self.prof.to_string(),
             },
-            self.room
-        )
+            &self.room,
+        ))?;
+        Ok(())
     }
 
     pub fn parse_string(s: impl Into<String>) -> Result<ColleData> {
@@ -215,7 +217,7 @@ impl Ord for Colle {
 }
 
 pub enum ColleStringFormat {
-    ForProf,
+    ForProf(GroupId),
     Implicit,
     Explicit,
 }

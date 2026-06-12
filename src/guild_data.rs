@@ -1,6 +1,6 @@
 use crate::{
     Context, GLOBAL_DATA,
-    colle::{Colle, ColleData},
+    colle::{Colle, ColleData, ColleStringFormat},
     debug,
     error::{ColleParsingError, WattouError},
     group::{Group, GroupId},
@@ -193,35 +193,34 @@ impl GuildData {
             .next_occurrence(jour.inner())
     }
 
-    pub fn prochaines_colles_msg(&self) -> String {
-        format!(
-            "# Prochaines colles: {}",
-            self.groups
-                .iter()
-                .map(|group| format!(
-                    "\nGroupe {}{} {}",
-                    group.id,
-                    if self.ghosts.contains(&group.id) {
-                        " (fantôme 👻)"
-                    } else {
-                        ""
-                    },
-                    group
-                        .get_next_colles(2)
-                        .iter()
-                        .map(|colle| format!(
-                            "\n- {}",
-                            colle.format(crate::colle::ColleStringFormat::Implicit, vec![])
-                        ))
-                        .collect::<String>()
-                ))
-                .collect::<String>()
-        )
+    pub fn prochaines_colles_msg(&self) -> Result<String> {
+        let mut final_message = String::new();
+
+        for group in &self.groups {
+            let next_colles = group.get_next_colles(2);
+            final_message.push_str("\n## Groupe ");
+            final_message.push_str(&group.id.to_string());
+
+            if self.ghosts.contains(&group.id) {
+                final_message.push_str(" 👻");
+            }
+
+            if !next_colles.is_empty() {
+                for colle in next_colles {
+                    final_message.push_str("\n- ");
+                    colle.format(&mut final_message, ColleStringFormat::Implicit)?;
+                }
+            } else {
+                final_message.push_str("\nAucune colle prochainement");
+            }
+        }
+
+        Ok(final_message)
     }
 
-    pub async fn try_edit_toutes_les_colles_msg(&self, http: &Http) -> Result<()> {
+    pub async fn edit_toutes_les_colles_msg(&self, http: &Http) -> Result<()> {
         if let Some(message) = ToutesLesCollesMessage::read(self.guild_id) {
-            message?.edit(http, self.prochaines_colles_msg()).await?;
+            message?.edit(http, self.prochaines_colles_msg()?).await?;
         }
         Ok(())
     }

@@ -19,8 +19,8 @@ impl Group {
         self.colles
             .iter()
             .filter(|colle| colle.end > now)
-            .collect::<Vec<_>>()[..limit]
-            .into()
+            .take(limit)
+            .collect()
     }
 
     pub fn ics_calendar<'a>(&self) -> Result<String> {

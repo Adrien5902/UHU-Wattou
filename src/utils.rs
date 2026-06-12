@@ -1,9 +1,8 @@
-use time::{Month, OffsetDateTime, Weekday};
-
 use std::{
     fs::OpenOptions,
     io::{self, Write},
 };
+use time::{Month, OffsetDateTime, Weekday};
 
 pub fn write_to_log(s: &str) -> io::Result<()> {
     let st = format!("{}: {}", OffsetDateTime::now_local().unwrap(), s);

@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(async_fn_in_trait)]
+
 pub mod colle;
 pub mod commands;
 pub mod error;
@@ -63,18 +64,23 @@ impl EventHandler for Handler {
 }
 
 async fn refresh_messages(http: &Http) -> color_eyre::Result<()> {
-    let guilds = http.get_guilds(None, None).await?;
-    for guild in guilds {
-        match GuildData::get_from_id(guild.id) {
+    let guild_ids: Vec<GuildId> = http
+        .get_guilds(None, None)
+        .await?
+        .iter()
+        .map(|g| g.id)
+        .collect();
+
+    for id in guild_ids {
+        match GuildData::get_from_id(id) {
             Ok(guild_data) => {
-                guild_data.try_edit_toutes_les_colles_msg(&http).await?;
+                guild_data.edit_toutes_les_colles_msg(&http).await?;
                 guild_data.edit_semaine_tp_msg(&http).await?;
                 guild_data.refresh_subscribers_message(&http).await?;
             }
             Err(e) => {
                 if !e.is::<WattouError>()
-                    || *e.downcast_ref::<WattouError>().unwrap()
-                        != WattouError::NoDataForGuild(guild.id)
+                    || *e.downcast_ref::<WattouError>().unwrap() != WattouError::NoDataForGuild(id)
                 {
                     return Err(e);
                 }

@@ -1,21 +1,19 @@
-use std::{
-    collections::{self, HashMap},
-    fmt::Debug,
-    time::Duration,
-    u8,
-};
-
-use color_eyre::Result;
-use serde::{Deserialize, Serialize};
-use serenity::all::{CreateMessage, GetMessages, GuildId, Http, Mention, PrivateChannel, UserId};
-use time::OffsetDateTime;
-
 use crate::{
-    colle::Colle,
+    colle::{Colle, ColleStringFormat},
     debug,
     group::GroupId,
     guild_data::{GuildData, SavedData},
 };
+use color_eyre::Result;
+use serde::{Deserialize, Serialize};
+use serenity::all::{CreateMessage, GetMessages, GuildId, Http, Mention, PrivateChannel, UserId};
+use std::{
+    collections::{self, HashMap},
+    fmt::{Debug, Write},
+    time::Duration,
+    u8,
+};
+use time::OffsetDateTime;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Subscribers {
@@ -70,11 +68,11 @@ impl SubscriberData {
 }
 
 pub trait SubscribePlan: Debug {
-    type Predicate: ToString;
+    type PredicateData: Debug;
 
-    fn get_predicate(&self, guild_data: &GuildData) -> Option<Self::Predicate>;
-    fn create_message(&self, user_id: UserId, predicate: &Self::Predicate) -> Result<String>;
-    fn should_make_message(&self, predicate: &Self::Predicate) -> bool;
+    fn get_predicate<'a>(&self, guild_data: &'a GuildData) -> Option<&'a Self::PredicateData>;
+    fn create_message(&self, user_id: UserId, predicate: &Self::PredicateData) -> Result<String>;
+    fn should_make_message(&self, predicate: &Self::PredicateData) -> bool;
 
     async fn check_already_sent(
         channel: &PrivateChannel,
@@ -91,27 +89,30 @@ pub trait SubscribePlan: Debug {
             .is_some())
     }
 
-    async fn try_send(&self, user_id: UserId, http: &Http, guild_data: &GuildData) -> Result<()> {
-        if let Some(predicate) = self.get_predicate(guild_data) {
-            if self.should_make_message(&predicate) {
+    async fn try_send<'a>(
+        &'a self,
+        user_id: UserId,
+        http: &Http,
+        guild_data: &'a GuildData,
+    ) -> Result<()> {
+        if let Some(predicate_data) = self.get_predicate(guild_data) {
+            if self.should_make_message(&predicate_data) {
                 let user = http.get_user(user_id).await?;
                 let channel = user.create_dm_channel(http).await?;
-                let content = self.create_message(user_id, &predicate)?;
+                let content = self.create_message(user_id, &predicate_data)?;
 
                 if !Self::check_already_sent(&channel, http, &content).await? {
                     channel
                         .send_message(http, CreateMessage::new().content(content))
                         .await?;
                     debug!(
-                        "sent subscriber message for {} with {}",
-                        user_id,
-                        predicate.to_string()
+                        "sent subscriber message for {} with {:?}",
+                        user_id, predicate_data
                     )
                 } else {
                     debug!(
-                        "already sent subscriber message for {} with {} skipped sending",
-                        user_id,
-                        predicate.to_string()
+                        "already sent subscriber message for {} with {:?} skipped sending",
+                        user_id, predicate_data
                     )
                 }
             }
@@ -126,28 +127,29 @@ impl SubscriberData {
 }
 
 impl SubscribePlan for SubscriberData {
-    type Predicate = Colle;
+    type PredicateData = Colle;
 
-    fn get_predicate(&self, guild_data: &GuildData) -> Option<Self::Predicate> {
+    fn get_predicate<'a>(&self, guild_data: &'a GuildData) -> Option<&'a Self::PredicateData> {
         guild_data
             .get_group(self.group_id)
             .ok()?
             .get_next_colles(4)
             .into_iter()
             .find(|colle| colle.id.0 == 'A')
-            .cloned()
     }
 
-    fn should_make_message(&self, colle: &Self::Predicate) -> bool {
+    fn should_make_message(&self, colle: &Self::PredicateData) -> bool {
         return colle.start - OffsetDateTime::now_local().unwrap()
             < Duration::from_secs(60 * 60 * Self::MIN_HOUR_DIFF);
     }
 
-    fn create_message(&self, user_id: UserId, predicate: &Self::Predicate) -> Result<String> {
-        Ok(format!(
-            "{}, n'oublie pas ton carnet de colle pour ta colle {}",
+    fn create_message(&self, user_id: UserId, predicate: &Self::PredicateData) -> Result<String> {
+        let mut content = String::new();
+        content.write_fmt(format_args!(
+            "{}, n'oublie pas ton carnet de colle pour ta colle",
             Mention::from(user_id),
-            predicate.format(crate::colle::ColleStringFormat::Explicit, vec![])
-        ))
+        ))?;
+        predicate.format(&mut content, ColleStringFormat::Explicit)?;
+        Ok(content)
     }
 }

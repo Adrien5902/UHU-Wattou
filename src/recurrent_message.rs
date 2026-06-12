@@ -19,7 +19,8 @@ impl<const ID: usize> RecurrentMessage<ID> {
 
         message
             .edit(http, EditMessage::new().content(content_str.clone()))
-            .await.with_context(move || content_str)?;
+            .await
+            .with_context(|| content_str)?;
 
         debug!(
             "edited message {} in channel {} successfully",

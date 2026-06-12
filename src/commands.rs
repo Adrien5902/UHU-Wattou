@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use super::Context;
 use crate::{
     colle::ColleStringFormat,
@@ -12,6 +10,7 @@ use crate::{
 use color_eyre::Result;
 use poise::CreateReply;
 use serenity::all::CreateAttachment;
+use std::{fmt::Write, sync::Arc};
 
 #[poise::command(slash_command, guild_only)]
 pub async fn mes_colles(
@@ -24,19 +23,20 @@ pub async fn mes_colles(
     let guild_data = GuildData::from_ctx(ctx)?;
     let group = guild_data.get_group(group_id)?;
 
+    let mut content = String::new();
+    content.write_fmt(format_args!(
+        "Prochaines colles pour le groupe {}:",
+        group.id
+    ))?;
+    for colle in group.get_next_colles(5) {
+        content.push_str("\n- ");
+        colle.format(&mut content, ColleStringFormat::Explicit)?;
+    }
+
     ctx.send(
         CreateReply::default()
             .ephemeral(true)
-            .content(format!(
-                "Prochaines colles pour le groupe {}: \n- {}",
-                group.id,
-                group
-                    .get_next_colles(5)
-                    .iter()
-                    .map(|colle| colle.format(ColleStringFormat::Explicit, vec![]))
-                    .collect::<Vec<_>>()
-                    .join("\n- ")
-            ))
+            .content(content)
             .reply(true),
     )
     .await?;
@@ -70,7 +70,7 @@ pub async fn colles_calendrier(
 pub async fn toutes_les_colles(ctx: Context<'_>) -> Result<()> {
     ctx.defer().await?;
     let data = GuildData::from_ctx(ctx)?;
-    let handle = ctx.say(data.prochaines_colles_msg()).await?;
+    let handle = ctx.say(data.prochaines_colles_msg()?).await?;
 
     let message = handle.message().await?;
     ToutesLesCollesMessage::from(&message).save(data.guild_id)?;
@@ -178,19 +178,18 @@ pub async fn colles_de_prof(
         todo!("impl error");
     };
 
+    let mut content = String::new();
+    content.write_fmt(format_args!("Prochaines colles pour {}:", prof.name()))?;
+
+    for (group_id, colle) in prof.get_next_colles_in_guild(data, limit) {
+        content.push_str("\n- ");
+        colle.format(&mut content, ColleStringFormat::ForProf(group_id))?;
+    }
+
     ctx.send(
         CreateReply::default()
             .ephemeral(true)
-            .content(format!(
-                "Prochaines colles pour {}: \n- {}",
-                prof.name(),
-                prof.get_next_colles_in_guild(data, limit)
-                    .iter()
-                    .map(|(groupe_id, colle)| colle
-                        .format(ColleStringFormat::ForProf, vec![groupe_id.to_string()]))
-                    .collect::<Vec<_>>()
-                    .join("\n- ")
-            ))
+            .content(content)
             .reply(true),
     )
     .await?;
