@@ -10,7 +10,7 @@ use std::{cmp::Ordering, fmt::Write, str::FromStr, sync::Arc};
 use time::{Date, OffsetDateTime, macros::format_description};
 
 /// e.g. : M4 (Maths n°4)
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ColleId(pub char, pub u8);
 
 impl FromStr for ColleId {
@@ -49,16 +49,24 @@ impl ToString for ColleId {
 
 /// Room number, e.g. : 207
 pub type RoomNumber = String;
-pub type ColleData = (ColleId, (u8, u8), Jour, RoomNumber, Arc<Prof>);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Colle {
+    pub template: Arc<ColleTemplate>,
+    pub group_id: GroupId,
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ColleTemplate {
     pub id: ColleId,
     pub prof: Arc<Prof>,
     pub room: RoomNumber,
 
-    pub start: OffsetDateTime,
-    pub end: OffsetDateTime,
+    pub day: Jour,
+    pub hour_start: u8,
+    pub hour_end: u8,
 }
 
 impl Colle {
@@ -76,30 +84,48 @@ impl Colle {
         f.write_fmt(format_args!(
             "{}: {} {} {} {} avec {} en {}",
             match format {
-                ColleStringFormat::Explicit => self.id.explicit(),
-                ColleStringFormat::Implicit | ColleStringFormat::ForProf(_) => self.id.to_string(),
+                ColleStringFormat::Explicit => self.template.id.explicit(),
+                ColleStringFormat::Implicit | ColleStringFormat::ForProf(_) =>
+                    self.template.id.to_string(),
             },
-            Jour::from(self.start.weekday()).to_string(),
+            Jour::from(self.start.weekday()).as_str(),
             self.start.day().to_string(),
             month_to_short_fr(self.start.month()),
             self.horaire(),
             match format {
                 ColleStringFormat::ForProf(group) => format!("le groupe {} ", group),
-                _ => self.prof.to_string(),
+                _ => self.template.prof.to_string(),
             },
-            &self.room,
+            &self.template.room,
         ))?;
         Ok(())
     }
 
-    pub fn parse_string(s: impl Into<String>) -> Result<ColleData> {
-        let mut string = s.into();
-        let open_paren = string
+    pub fn from_template(
+        template: Arc<ColleTemplate>,
+        date: Date,
+        group_id: GroupId,
+    ) -> Result<Self> {
+        Ok(Self {
+            group_id,
+            start: date.with_hms(template.hour_start, 0, 0)?.assume_utc(),
+            end: date.with_hms(template.hour_end, 0, 0)?.assume_utc(),
+            template,
+        })
+    }
+}
+
+impl FromStr for ColleTemplate {
+    type Err = color_eyre::eyre::Report;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let open_paren = s
             .find("(")
             .ok_or(WattouError::ColleParsingFailed(ColleParsingError::Unknown))?;
-        let room_number = &string[open_paren + 1..string.len() - 1].to_string();
-        string.replace_range(open_paren - 1..string.len(), "");
-        let mut words = string.split(" ");
+
+        let room_number = &s[open_paren + 1..s.len() - 1];
+
+        let mut words = s[..open_paren - 1].split(" ");
         let id = ColleId::from_str(
             words
                 .next()
@@ -112,7 +138,7 @@ impl Colle {
             .pop()
             .ok_or(WattouError::ColleParsingFailed(ColleParsingError::Unknown))?;
 
-        let [start, end]: [u8; 2] = horaire
+        let [hour_start, hour_end]: [u8; 2] = horaire
             .split("-")
             .map(|p| p[..p.len() - 1].parse().ok())
             .collect::<Option<Vec<_>>>()
@@ -124,7 +150,7 @@ impl Colle {
         let jour_str = words_vec
             .pop()
             .ok_or(WattouError::ColleParsingFailed(ColleParsingError::Unknown))?;
-        let jour = Jour::from(jour_str);
+        let day = Jour::from_str(jour_str)?;
 
         let prof_str = words_vec.join(" ");
         let arc_str = Arc::from(prof_str);
@@ -141,18 +167,13 @@ impl Colle {
             arc
         };
 
-        Ok((id, (start, end), jour, room_number.clone(), prof))
-    }
-
-    pub fn from_data_and_date(date: Date, data: ColleData) -> Result<Self> {
-        let (id, (start, end), _, room, prof) = data;
-
-        Ok(Self {
+        Ok(ColleTemplate {
             id,
-            room,
-            start: date.with_hms(start, 0, 0)?.assume_utc(),
-            end: date.with_hms(end, 0, 0)?.assume_utc(),
             prof,
+            room: room_number.into(),
+            day,
+            hour_start,
+            hour_end,
         })
     }
 }

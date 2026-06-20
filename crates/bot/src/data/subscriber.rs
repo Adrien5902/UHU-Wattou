@@ -135,7 +135,7 @@ impl SubscribePlan for SubscriberData {
             .ok()?
             .get_next_colles(4)
             .into_iter()
-            .find(|colle| colle.id.0 == 'A')
+            .find(|colle| colle.template.id.0 == 'A')
     }
 
     fn should_make_message(&self, colle: &Self::PredicateData) -> bool {

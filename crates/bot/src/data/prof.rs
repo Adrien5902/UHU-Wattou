@@ -41,7 +41,8 @@ impl Prof {
             .iter()
             .flat_map(|groupe| {
                 groupe.colles.iter().filter_map(|colle| {
-                    (*self == *colle.prof && colle.end > now).then_some((groupe.id, colle.clone()))
+                    (*self == *colle.template.prof && colle.end > now)
+                        .then_some((groupe.id, colle.clone()))
                 })
             })
             .collect::<Vec<_>>();

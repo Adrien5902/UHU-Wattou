@@ -36,20 +36,20 @@ impl Colle {
 
         let mut event = Event::new(Uuid::new_v4().to_string(), start.clone());
 
-        event.push(Organizer::new(self.prof.to_string()));
+        event.push(Organizer::new(self.template.prof.to_string()));
         event.push(DtStart::new(start));
         event.push(DtEnd::new(end));
         event.push(ICS_CATEGORY.clone());
         event.push(Summary::new(format!(
             "Colle {} avec {}",
-            &self.id.explicit(),
-            &self.prof.to_string()
+            &self.template.id.explicit(),
+            &self.template.prof.to_string()
         )));
         event.push(Description::new(format!(
             "Colle {} avec {} en salle {} de {}",
-            &self.id.explicit(),
-            &self.prof.to_string(),
-            &self.room,
+            &self.template.id.explicit(),
+            &self.template.prof.to_string(),
+            &self.template.room,
             self.horaire()
         )));
 

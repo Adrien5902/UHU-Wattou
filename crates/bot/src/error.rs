@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum WattouError {
+    #[error("FailedToParseDayString")]
+    FailedToParseDayString,
     #[error("Cette commande ne peut pas être utilisée en mp")]
     CommandCanOnlyBeUsedInGuilds,
     #[error("Le groupe {1} n'exsite pas pour le serveur {0}")]

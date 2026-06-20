@@ -1,8 +1,10 @@
 use crate::{
     Context, GLOBAL_DATA,
-    data::colle::{Colle, ColleData, ColleStringFormat},
-    data::group::{Group, GroupId},
-    data::subscriber::{SubscribePlan, Subscribers},
+    data::{
+        colle::{Colle, ColleId, ColleStringFormat, ColleTemplate},
+        group::{Group, GroupId},
+        subscriber::{SubscribePlan, Subscribers},
+    },
     debug,
     error::{ColleParsingError, WattouError},
     recurrent_message::{SemaineTPMessage, ToutesLesCollesMessage},
@@ -10,13 +12,14 @@ use crate::{
 };
 use color_eyre::Result;
 use serenity::all::{GuildId, Http};
-use std::{fs, num::ParseIntError, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, fs, num::ParseIntError, path::PathBuf, str::FromStr, sync::Arc};
 use time::{Date, Duration, OffsetDateTime, Weekday, macros::format_description};
 
 pub type WeekId = usize;
 
 #[derive(Debug)]
 pub struct GuildData {
+    pub colle_templates: HashMap<ColleId, Arc<ColleTemplate>>,
     pub guild_id: GuildId,
     pub groups: Vec<Group>,
     pub ghosts: Vec<GroupId>,
@@ -25,7 +28,7 @@ pub struct GuildData {
 impl GuildData {
     pub const GLOBAL_DATA_FOLDER_NAME: &'static str = "data";
     pub const FILE_NAME_GHOSTS_GROUPS: &'static str = "ghosts";
-    pub const FILE_NAME_COLLE_LIST: &'static str = "colles";
+    pub const FILE_NAME_COLLE_LIST: &'static str = "colle_templates";
     pub const FILE_NAME_WEEKS_INFO: &'static str = "weeks";
     pub const FILE_NAME_COLLOSCOPE: &'static str = "colloscope";
 
@@ -36,10 +39,11 @@ impl GuildData {
 
         debug!("Parsing data for guild {}", guild_id);
 
-        let groups = Self::read_groups_data(guild_id)?;
+        let (groups, colle_templates) = Self::parse_colloscope(guild_id)?;
         let ghosts = Self::read_ghost_groups(guild_id)?;
 
         let arc = Arc::new(Self {
+            colle_templates,
             guild_id,
             groups,
             ghosts,
@@ -93,21 +97,6 @@ impl GuildData {
         Ok(fs::read_to_string(&path)?)
     }
 
-    pub fn read_groups_data(guild_id: GuildId) -> Result<Vec<Group>> {
-        let colloscope = Self::parse_colloscope(guild_id)?;
-        let groups = colloscope
-            .into_iter()
-            .enumerate()
-            .map(|(i, colles)| Group {
-                guild_id,
-                id: i + 1,
-                colles,
-            })
-            .collect();
-
-        Ok(groups)
-    }
-
     pub fn read_ghost_groups(guild_id: GuildId) -> Result<Vec<GroupId>> {
         let s = Self::read_text_for_guild(guild_id, Self::FILE_NAME_GHOSTS_GROUPS)?;
         let res: Result<Vec<usize>, ParseIntError> = s
@@ -117,14 +106,15 @@ impl GuildData {
         Ok(res?)
     }
 
-    pub fn parse_colloscope(guild_id: GuildId) -> Result<Vec<Vec<Colle>>> {
-        let colloscope = Self::read_text_for_guild(guild_id, Self::FILE_NAME_COLLOSCOPE)?;
-        let colle_list = Self::read_text_for_guild(guild_id, Self::FILE_NAME_COLLE_LIST)?
-            .lines()
-            .map(|s| Colle::parse_string(s))
-            .collect::<Result<Vec<ColleData>>>()?;
+    pub fn parse_colloscope(
+        guild_id: GuildId,
+    ) -> Result<(Vec<Group>, HashMap<ColleId, Arc<ColleTemplate>>)> {
+        let mut groups = Vec::new();
 
-        let weeks = Self::read_weeks_data(guild_id)?;
+        let templates = Self::parse_colle_templates(guild_id)?;
+        let weeks_dates = Self::read_weeks_data(guild_id)?;
+
+        let colloscope = Self::read_text_for_guild(guild_id, Self::FILE_NAME_COLLOSCOPE)?;
 
         let mut lines = colloscope.lines();
 
@@ -134,48 +124,59 @@ impl GuildData {
             .map(|weeks_tuple| weeks_tuple.split("-").map(|n| n.parse().unwrap()).collect())
             .collect();
 
-        let groups = lines
-            .map(|group_colles| {
-                group_colles
-                    .split(" ")
-                    .enumerate()
-                    .map(|(i, colles)| {
-                        let weeks_n = &week_numbers[i];
-                        let data = colles
-                            .split("+")
-                            .map(|colle_id| {
-                                colle_list
-                                    .iter()
-                                    .find(|data| &data.0.to_string() == colle_id)
-                                    .ok_or(WattouError::ColleParsingFailed(
-                                        ColleParsingError::Unknown,
-                                    ))
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
+        for (i, line) in lines.enumerate() {
+            let group_id = i + 1;
+            let week_templates: Vec<Vec<Arc<ColleTemplate>>> = line
+                .split(" ")
+                .map(|s| {
+                    Ok(s.split("+")
+                        .map(|colle_id| {
+                            Ok(templates
+                                .get(&ColleId::from_str(colle_id)?)
+                                .ok_or(WattouError::ColleParsingFailed(ColleParsingError::Unknown))?
+                                .clone())
+                        })
+                        .collect::<Result<Vec<_>>>()?)
+                })
+                .collect::<Result<Vec<Vec<_>>>>()?;
 
-                        let colles = weeks_n
-                            .iter()
-                            .flat_map(|week| {
-                                data.iter().map(|d| {
-                                    let (_, _, jour, _, _) = d;
-                                    let date = Self::get_date(&weeks, *week, *jour);
-                                    Colle::from_data_and_date(date, (*d).clone())
-                                })
-                            })
-                            .collect::<Result<Vec<Colle>>>()?;
+            let mut colles = Vec::new();
 
-                        Ok(colles)
-                    })
-                    .collect::<Result<Vec<Vec<Colle>>>>()
-                    .map(|inner| {
-                        let mut colles = inner.into_iter().flatten().collect::<Vec<Colle>>();
-                        colles.sort();
-                        colles
-                    })
-            })
-            .collect::<Result<_>>()?;
+            for (j, weeks) in week_numbers.iter().enumerate() {
+                let templates_for_this_week = &week_templates[j];
 
-        Ok(groups)
+                for week_number in weeks {
+                    for template in templates_for_this_week {
+                        let date = Self::get_date(&weeks_dates, *week_number, template.day);
+                        let colle = Colle::from_template(template.clone(), date, group_id)?;
+
+                        colles.push(colle);
+                    }
+                }
+            }
+
+            groups.push(Group {
+                guild_id,
+                id: group_id,
+                colles,
+            });
+        }
+
+        Ok((groups, templates))
+    }
+
+    pub fn parse_colle_templates(
+        guild_id: GuildId,
+    ) -> Result<HashMap<ColleId, Arc<ColleTemplate>>> {
+        Ok(
+            Self::read_text_for_guild(guild_id, Self::FILE_NAME_COLLE_LIST)?
+                .lines()
+                .map(|s| {
+                    let template = Arc::new(ColleTemplate::from_str(s)?);
+                    Ok((template.id, template))
+                })
+                .collect::<Result<HashMap<_, _>>>()?,
+        )
     }
 
     pub fn read_weeks_data(guild_id: GuildId) -> Result<Vec<Date>> {
@@ -187,10 +188,10 @@ impl GuildData {
         Ok(res)
     }
 
-    pub fn get_date(weeks: &[Date], week: usize, jour: Jour) -> Date {
+    pub fn get_date(weeks: &[Date], week: usize, day: Jour) -> Date {
         weeks[week - 1]
             .saturating_sub(Duration::days(7))
-            .next_occurrence(jour.inner())
+            .next_occurrence(day.inner())
     }
 
     pub fn prochaines_colles_msg(&self) -> Result<String> {

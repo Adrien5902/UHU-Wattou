@@ -1,6 +1,9 @@
+use crate::error::WattouError;
+use color_eyre::eyre::Result;
 use std::{
     fs::OpenOptions,
     io::{self, Write},
+    str::FromStr,
 };
 use time::{Month, OffsetDateTime, Weekday};
 
@@ -33,7 +36,7 @@ macro_rules! debug {
     }
 }
 
-pub fn month_to_short_fr(month: Month) -> String {
+pub fn month_to_short_fr(month: Month) -> &'static str {
     match month {
         Month::January => "Jan",
         Month::February => "Fév",
@@ -48,7 +51,6 @@ pub fn month_to_short_fr(month: Month) -> String {
         Month::November => "Nov",
         Month::December => "Dec",
     }
-    .to_string()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,9 +82,11 @@ impl PartialOrd for Jour {
     }
 }
 
-impl From<&str> for Jour {
-    fn from(value: &str) -> Self {
-        Self(match value {
+impl FromStr for Jour {
+    type Err = color_eyre::eyre::Report;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(Self(match s {
             "Lu" => Weekday::Monday,
             "Ma" => Weekday::Tuesday,
             "Me" => Weekday::Wednesday,
@@ -90,13 +94,13 @@ impl From<&str> for Jour {
             "Ve" => Weekday::Friday,
             "Sa" => Weekday::Saturday,
             "Di" => Weekday::Sunday,
-            _ => panic!(),
-        })
+            _ => Err(WattouError::FailedToParseDayString)?,
+        }))
     }
 }
 
-impl ToString for Jour {
-    fn to_string(&self) -> String {
+impl Jour {
+    pub fn as_str(&self) -> &'static str {
         match self.0 {
             Weekday::Monday => "Lundi",
             Weekday::Tuesday => "Mardi",
@@ -106,6 +110,11 @@ impl ToString for Jour {
             Weekday::Saturday => "Samedi",
             Weekday::Sunday => "Dimanche",
         }
-        .to_string()
+    }
+}
+
+impl Into<&'static str> for Jour {
+    fn into(self) -> &'static str {
+        self.as_str()
     }
 }
