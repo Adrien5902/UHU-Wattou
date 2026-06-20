@@ -1,21 +1,13 @@
 use crate::{
     GLOBAL_DATA,
+    data::group::GroupId,
+    data::prof::Prof,
     error::{ColleParsingError, WattouError},
-    group::GroupId,
-    prof::Prof,
     utils::{Jour, month_to_short_fr},
 };
 use color_eyre::{Result, eyre};
-use ics::{
-    Event,
-    properties::{Categories, Description, DtEnd, DtStart, Organizer, Summary},
-};
-use once_cell::sync::Lazy;
 use std::{cmp::Ordering, fmt::Write, str::FromStr, sync::Arc};
-use time::{
-    Date, OffsetDateTime, format_description::well_known::Iso8601, macros::format_description,
-};
-use uuid::Uuid;
+use time::{Date, OffsetDateTime, macros::format_description};
 
 /// e.g. : M4 (Maths n°4)
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -58,8 +50,6 @@ impl ToString for ColleId {
 /// Room number, e.g. : 207
 pub type RoomNumber = String;
 pub type ColleData = (ColleId, (u8, u8), Jour, RoomNumber, Arc<Prof>);
-
-const ICS_CATEGORY: Lazy<Categories> = Lazy::new(|| Categories::new("Colles"));
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Colle {
@@ -164,42 +154,6 @@ impl Colle {
             end: date.with_hms(end, 0, 0)?.assume_utc(),
             prof,
         })
-    }
-
-    pub fn to_ics_event(&self) -> Result<Event<'_>> {
-        let [start, end]: [String; 2] = [self.start, self.end]
-            .iter()
-            .map(|date| {
-                Ok(date
-                    .format(&Iso8601::DATE_TIME)?
-                    .chars()
-                    .filter(|c| c.is_alphanumeric())
-                    .collect::<String>())
-            })
-            .collect::<Result<Vec<String>, eyre::Report>>()?
-            .try_into()
-            .unwrap();
-
-        let mut event = Event::new(Uuid::new_v4().to_string(), start.clone());
-
-        event.push(Organizer::new(self.prof.to_string()));
-        event.push(DtStart::new(start));
-        event.push(DtEnd::new(end));
-        event.push(ICS_CATEGORY.clone());
-        event.push(Summary::new(format!(
-            "Colle {} avec {}",
-            &self.id.explicit(),
-            &self.prof.to_string()
-        )));
-        event.push(Description::new(format!(
-            "Colle {} avec {} en salle {} de {}",
-            &self.id.explicit(),
-            &self.prof.to_string(),
-            &self.room,
-            self.horaire()
-        )));
-
-        Ok(event)
     }
 }
 

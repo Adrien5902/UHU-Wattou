@@ -1,4 +1,4 @@
-use crate::{debug, error::WattouError, guild_data::SavedData};
+use crate::{data::guild::SavedData, debug, error::WattouError};
 use color_eyre::{Result, eyre::Context};
 use serenity::all::{ChannelId, EditMessage, Http, Message, MessageId};
 use std::borrow::Cow;

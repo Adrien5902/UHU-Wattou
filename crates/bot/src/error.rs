@@ -1,4 +1,4 @@
-use crate::group::GroupId;
+use crate::data::group::GroupId;
 use serenity::all::GuildId;
 use thiserror::Error;
 

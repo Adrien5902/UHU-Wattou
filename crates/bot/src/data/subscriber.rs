@@ -1,8 +1,8 @@
 use crate::{
-    colle::{Colle, ColleStringFormat},
+    data::colle::{Colle, ColleStringFormat},
+    data::group::GroupId,
+    data::guild::{GuildData, SavedData},
     debug,
-    group::GroupId,
-    guild_data::{GuildData, SavedData},
 };
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};

@@ -2,4 +2,4 @@
 .env
 *.log
 *.exe
-data
+/data

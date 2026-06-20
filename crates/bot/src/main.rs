@@ -1,17 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(async_fn_in_trait)]
 
-pub mod colle;
 pub mod commands;
+pub mod data;
 pub mod error;
-pub mod group;
-pub mod guild_data;
-pub mod prof;
 pub mod recurrent_message;
-pub mod subscriber;
 pub mod utils;
 
-use crate::{error::WattouError, guild_data::GuildData, prof::Prof};
+use crate::{data::guild::GuildData, data::prof::Prof, error::WattouError};
 use color_eyre::{Result, eyre::Report};
 use dotenv::dotenv;
 use once_cell::sync::Lazy;

@@ -1,4 +1,4 @@
-use crate::{colle::Colle, group::GroupId, guild_data::GuildData};
+use crate::{data::colle::Colle, data::group::GroupId, data::guild::GuildData};
 use std::sync::Arc;
 use time::OffsetDateTime;
 

@@ -1,11 +1,11 @@
 use crate::{
     Context, GLOBAL_DATA,
-    colle::{Colle, ColleData, ColleStringFormat},
+    data::colle::{Colle, ColleData, ColleStringFormat},
+    data::group::{Group, GroupId},
+    data::subscriber::{SubscribePlan, Subscribers},
     debug,
     error::{ColleParsingError, WattouError},
-    group::{Group, GroupId},
     recurrent_message::{SemaineTPMessage, ToutesLesCollesMessage},
-    subscriber::{SubscribePlan, Subscribers},
     utils::{Jour, month_to_short_fr},
 };
 use color_eyre::Result;
