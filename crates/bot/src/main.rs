@@ -20,6 +20,7 @@ use serenity::{
     async_trait,
     prelude::*,
 };
+
 use std::{
     collections::HashMap,
     env,
@@ -94,7 +95,8 @@ async fn refresh_messages(http: &Http) -> color_eyre::Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
-    dotenv().ok();
+    dotenv()?;
+
     let token = env::var("DISCORD_TOKEN").expect("Missing DISCORD_TOKEN");
 
     let framework = poise::Framework::builder()
@@ -122,6 +124,7 @@ async fn main() -> Result<()> {
         .event_handler(Handler)
         .framework(framework)
         .await?;
+
     client.start().await?;
 
     Ok(())
