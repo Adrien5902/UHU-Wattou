@@ -1,10 +1,11 @@
 use crate::{data::colle::Colle, data::group::GroupId, data::guild::GuildData};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use time::OffsetDateTime;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Prof {
-    name: Arc<str>,
+    name: Box<str>,
 }
 
 impl PartialEq for Prof {
@@ -22,14 +23,6 @@ impl ToString for Prof {
 }
 
 impl Prof {
-    pub fn name<'a>(&'a self) -> &'a str {
-        &self.name
-    }
-
-    pub fn new(name: Arc<str>) -> Self {
-        Self { name }
-    }
-
     pub fn get_next_colles_in_guild(
         &self,
         guild_data: Arc<GuildData>,
@@ -37,11 +30,12 @@ impl Prof {
     ) -> Vec<(GroupId, Colle)> {
         let now = OffsetDateTime::now_utc();
         let mut colles = guild_data
+            .persistent
             .groups
             .iter()
             .flat_map(|groupe| {
                 groupe.colles.iter().filter_map(|colle| {
-                    (*self == *colle.template.prof && colle.end > now)
+                    (*self == *colle.get_template(&guild_data).prof && colle.end > now)
                         .then_some((groupe.id, colle.clone()))
                 })
             })
@@ -50,4 +44,10 @@ impl Prof {
 
         colles[..limit].to_vec()
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
+
+pub type ProfId = usize;

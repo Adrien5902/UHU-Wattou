@@ -1,19 +1,25 @@
 use crate::{
     GLOBAL_DATA,
-    data::group::GroupId,
-    data::prof::Prof,
+    data::{
+        group::{Group, GroupId},
+        guild::GuildData,
+        prof::{Prof, ProfId},
+        resolve::Resolve,
+    },
     error::{ColleParsingError, WattouError},
     utils::{Jour, month_to_short_fr},
 };
 use color_eyre::{Result, eyre};
+use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, fmt::Write, str::FromStr, sync::Arc};
-use time::{Date, OffsetDateTime, macros::format_description};
+use time::{OffsetDateTime, macros::format_description};
 
 /// e.g. : M4 (Maths n°4)
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct ColleId(pub char, pub u8);
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct ColleTemplateId(pub char, pub u8);
+pub type ColleId = usize;
 
-impl FromStr for ColleId {
+impl FromStr for ColleTemplateId {
     type Err = eyre::Report;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let chars = s.chars();
@@ -26,7 +32,7 @@ impl FromStr for ColleId {
     }
 }
 
-impl ColleId {
+impl ColleTemplateId {
     pub fn explicit(&self) -> String {
         let mut s = match &self.0 {
             'M' => "Maths",
@@ -41,7 +47,7 @@ impl ColleId {
     }
 }
 
-impl ToString for ColleId {
+impl ToString for ColleTemplateId {
     fn to_string(&self) -> String {
         self.0.to_string() + &self.1.to_string()
     }
@@ -50,18 +56,24 @@ impl ToString for ColleId {
 /// Room number, e.g. : 207
 pub type RoomNumber = String;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Colle {
-    pub template: Arc<ColleTemplate>,
-    pub group_id: GroupId,
-    pub start: OffsetDateTime,
-    pub end: OffsetDateTime,
+    template_id: ColleTemplateId,
+    group_id: GroupId,
+    pub(crate) start: OffsetDateTime,
+    pub(crate) end: OffsetDateTime,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ResolvedColle<'g, 's> {
+    template: &'g ColleTemplate,
+    group: &'g Group,
+    colle: &'s Colle,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ColleTemplate {
-    pub id: ColleId,
-    pub prof: Arc<Prof>,
+    pub id: ColleTemplateId,
+    pub prof: ProfId,
     pub room: RoomNumber,
 
     pub day: Jour,
@@ -77,6 +89,33 @@ impl Colle {
             .join("-")
     }
 
+    // pub fn from_template(template: &ColleTemplate, date: Date, group_id: GroupId) -> Result<Self> {
+    //     Ok(Self {
+    //         group_id,
+    //         start: date.with_hms(template.hour_start, 0, 0)?.assume_utc(),
+    //         end: date.with_hms(template.hour_end, 0, 0)?.assume_utc(),
+    //         template,
+    //     })
+    // }
+}
+
+impl Resolve for Colle {
+    type Id = ColleId;
+    type ResolvedSelf<'g, 's> = ResolvedColle<'g, 's>;
+    fn resolve<'s, 'g: 's>(&'s self, guild_data: &'g GuildData) -> Option<Self::ResolvedSelf<'g, 's>> {
+        Some(Self::ResolvedSelf{
+            group: Group::from_id(&self.group_id, guild_data)?,
+            template: ColleTemplate::from_id(&self.template_id, guild_data)?,
+            colle: self
+        })
+    }
+
+    fn from_id<'g>(id: &Self::Id, guild_data: &'g GuildData) -> Option<&'g Self> {
+        guild_data.persistent.colles.get(*id)
+    }
+}
+
+impl<'g, 's> ResolvedColle<'g, 's> {
     pub fn format<F>(&self, mut f: F, format: ColleStringFormat) -> Result<()>
     where
         F: Write,
@@ -88,10 +127,10 @@ impl Colle {
                 ColleStringFormat::Implicit | ColleStringFormat::ForProf(_) =>
                     self.template.id.to_string(),
             },
-            Jour::from(self.start.weekday()).as_str(),
-            self.start.day().to_string(),
-            month_to_short_fr(self.start.month()),
-            self.horaire(),
+            Jour::from(self.colle.start.weekday()).as_str(),
+            self.colle.start.day().to_string(),
+            month_to_short_fr(self.colle.start.month()),
+            self.colle.horaire(),
             match format {
                 ColleStringFormat::ForProf(group) => format!("le groupe {} ", group),
                 _ => self.template.prof.to_string(),
@@ -99,19 +138,6 @@ impl Colle {
             &self.template.room,
         ))?;
         Ok(())
-    }
-
-    pub fn from_template(
-        template: Arc<ColleTemplate>,
-        date: Date,
-        group_id: GroupId,
-    ) -> Result<Self> {
-        Ok(Self {
-            group_id,
-            start: date.with_hms(template.hour_start, 0, 0)?.assume_utc(),
-            end: date.with_hms(template.hour_end, 0, 0)?.assume_utc(),
-            template,
-        })
     }
 }
 
@@ -126,7 +152,7 @@ impl FromStr for ColleTemplate {
         let room_number = &s[open_paren + 1..s.len() - 1];
 
         let mut words = s[..open_paren - 1].split(" ");
-        let id = ColleId::from_str(
+        let id = ColleTemplateId::from_str(
             words
                 .next()
                 .ok_or(WattouError::ColleParsingFailed(ColleParsingError::Unknown))?,

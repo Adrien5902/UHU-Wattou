@@ -1,5 +1,6 @@
 use crate::error::WattouError;
 use color_eyre::eyre::Result;
+use serde::{Deserialize, Serialize};
 use std::{
     fs::OpenOptions,
     io::{self, Write},
@@ -53,7 +54,7 @@ pub fn month_to_short_fr(month: Month) -> &'static str {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Jour(Weekday);
 
 impl From<Weekday> for Jour {

@@ -1,9 +1,7 @@
 use crate::{
     Context, GLOBAL_DATA,
     data::{
-        colle::{Colle, ColleId, ColleStringFormat, ColleTemplate},
-        group::{Group, GroupId},
-        subscriber::{SubscribePlan, Subscribers},
+        colle::{Colle, ColleTemplateId, ColleStringFormat, ColleTemplate}, group::{Group, GroupId}, prof::Prof, subscriber::{SubscribePlan, Subscribers}
     },
     debug,
     error::{ColleParsingError, WattouError},
@@ -11,6 +9,7 @@ use crate::{
     utils::{Jour, month_to_short_fr},
 };
 use color_eyre::Result;
+use serde::{Deserialize, Serialize};
 use serenity::all::{GuildId, Http};
 use std::{collections::HashMap, fs, num::ParseIntError, path::PathBuf, str::FromStr, sync::Arc};
 use time::{Date, Duration, OffsetDateTime, Weekday, macros::format_description};
@@ -19,11 +18,22 @@ pub type WeekId = usize;
 
 #[derive(Debug)]
 pub struct GuildData {
-    pub colle_templates: HashMap<ColleId, Arc<ColleTemplate>>,
+    pub persistent: GuildDataPersistent,
+    pub mutable: GuildDataMutable,
     pub guild_id: GuildId,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GuildDataPersistent {
+    pub colle_templates: HashMap<ColleTemplateId, ColleTemplate>,
+    pub profs: Vec<Prof>,
+    pub colles: Vec<Colle>,
     pub groups: Vec<Group>,
     pub ghosts: Vec<GroupId>,
 }
+
+#[derive(Debug)]
+pub struct GuildDataMutable {}
 
 impl GuildData {
     pub const GLOBAL_DATA_FOLDER_NAME: &'static str = "data";
@@ -32,7 +42,7 @@ impl GuildData {
     pub const FILE_NAME_WEEKS_INFO: &'static str = "weeks";
     pub const FILE_NAME_COLLOSCOPE: &'static str = "colloscope";
 
-    fn new(guild_id: GuildId) -> Result<Arc<Self>> {
+    fn new(guild_id: GuildId) -> Result<Self> {
         if !fs::exists(Self::folder(guild_id))? {
             Err(WattouError::NoDataForGuild(guild_id))?
         }
@@ -41,26 +51,31 @@ impl GuildData {
 
         let (groups, colle_templates) = Self::parse_colloscope(guild_id)?;
         let ghosts = Self::read_ghost_groups(guild_id)?;
+        let colles = todo!();
 
-        let arc = Arc::new(Self {
-            colle_templates,
+        let data = (Self {
             guild_id,
-            groups,
-            ghosts,
+            mutable: GuildDataMutable {},
+            persistent: GuildDataPersistent {
+                colles,
+                colle_templates,
+                groups,
+                ghosts,
+            },
         });
 
         GLOBAL_DATA
             .lock()
             .unwrap()
             .guilds_data
-            .insert(guild_id, arc.clone());
+            .insert(guild_id, data);
 
         debug!("Parsed data for guild {}", guild_id);
 
-        Ok(arc)
+        Ok(data)
     }
 
-    pub fn get_from_id(id: GuildId) -> Result<Arc<Self>> {
+    pub fn get_from_id(id: GuildId) -> Result<&Self> {
         if let Some(arc) = GLOBAL_DATA.lock().unwrap().guilds_data.get(&id) {
             return Ok(arc.clone());
         } else {
@@ -108,7 +123,7 @@ impl GuildData {
 
     pub fn parse_colloscope(
         guild_id: GuildId,
-    ) -> Result<(Vec<Group>, HashMap<ColleId, Arc<ColleTemplate>>)> {
+    ) -> Result<(Vec<Group>, HashMap<ColleTemplateId, ColleTemplate>)> {
         let mut groups = Vec::new();
 
         let templates = Self::parse_colle_templates(guild_id)?;
@@ -126,13 +141,13 @@ impl GuildData {
 
         for (i, line) in lines.enumerate() {
             let group_id = i + 1;
-            let week_templates: Vec<Vec<Arc<ColleTemplate>>> = line
+            let week_templates: Vec<Vec<ColleTemplate>> = line
                 .split(" ")
                 .map(|s| {
                     Ok(s.split("+")
                         .map(|colle_id| {
                             Ok(templates
-                                .get(&ColleId::from_str(colle_id)?)
+                                .get(&ColleTemplateId::from_str(colle_id)?)
                                 .ok_or(WattouError::ColleParsingFailed(ColleParsingError::Unknown))?
                                 .clone())
                         })
@@ -148,7 +163,7 @@ impl GuildData {
                 for week_number in weeks {
                     for template in templates_for_this_week {
                         let date = Self::get_date(&weeks_dates, *week_number, template.day);
-                        let colle = Colle::from_template(template.clone(), date, group_id)?;
+                        let colle = Colle::from_template(template, date, group_id)?;
 
                         colles.push(colle);
                     }
@@ -165,14 +180,12 @@ impl GuildData {
         Ok((groups, templates))
     }
 
-    pub fn parse_colle_templates(
-        guild_id: GuildId,
-    ) -> Result<HashMap<ColleId, Arc<ColleTemplate>>> {
+    pub fn parse_colle_templates(guild_id: GuildId) -> Result<HashMap<ColleTemplateId, ColleTemplate>> {
         Ok(
             Self::read_text_for_guild(guild_id, Self::FILE_NAME_COLLE_LIST)?
                 .lines()
                 .map(|s| {
-                    let template = Arc::new(ColleTemplate::from_str(s)?);
+                    let template = ColleTemplate::from_str(s)?;
                     Ok((template.id, template))
                 })
                 .collect::<Result<HashMap<_, _>>>()?,
@@ -197,12 +210,12 @@ impl GuildData {
     pub fn prochaines_colles_msg(&self) -> Result<String> {
         let mut final_message = String::new();
 
-        for group in &self.groups {
+        for group in &self.persistent.groups {
             let next_colles = group.get_next_colles(2);
             final_message.push_str("\n## Groupe ");
             final_message.push_str(&group.id.to_string());
 
-            if self.ghosts.contains(&group.id) {
+            if self.persistent.ghosts.contains(&group.id) {
                 final_message.push_str(" 👻");
             }
 
@@ -264,6 +277,7 @@ impl GuildData {
 
     pub fn get_group(&self, group_id: usize) -> Result<&Group> {
         Ok(self
+            .persistent
             .groups
             .iter()
             .find(|g| g.id == group_id)
