@@ -75,17 +75,6 @@ impl GuildData {
         PathBuf::from("data").join(guild_id.to_string())
     }
 
-    // pub fn subscribers(&self) -> Result<Subscribers> {
-    //     Subscribers::read_or_default(self.guild_id)
-    // }
-
-    // pub async fn edit_semaine_tp_msg(&self, http: &Http) -> Result<()> {
-    //     if let Some(message) = SemaineTPMessage::read(self.guild_id) {
-    //         message?.edit(http, self.semaine_tp_msg()).await?;
-    //     }
-    //     Ok(())
-    // }
-
     pub fn get_group(&self, group_id: usize) -> Result<&Group> {
         Ok(self
             .persistent
@@ -94,16 +83,6 @@ impl GuildData {
             .find(|g| g.id == group_id)
             .ok_or(WattouError::GroupNotFound)?)
     }
-
-    // pub async fn refresh_subscribers_message(&self, http: &Http) -> Result<()> {
-    //     let subs = self.subscribers()?;
-    //
-    //     for (user_id, data) in subs.iter() {
-    //         data.try_send(*user_id, http, &self).await?;
-    //     }
-    //
-    //     Ok(())
-    // }
 
     pub async fn refresh_messages(&self, http: &Http) -> Result<()> {
         self.mutable
