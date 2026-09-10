@@ -29,6 +29,7 @@ pub struct GuildData {
 pub struct GuildDataPersistent {
     pub colle_templates: HashMap<ColleTemplateId, ColleTemplate>,
     pub profs: Vec<Prof>,
+    // This is sorted
     pub colles: Vec<Colle>,
     pub groups: Vec<Group>,
     pub ghosts: Vec<GroupId>,

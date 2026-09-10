@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
             event_handler: |framework, event| Box::pin(event_handler(framework, event)),
             commands: vec![
                 commands::clear(),
-                // commands::colles_de_prof(),
+                commands::colles_de_prof(),
                 // commands::rappel(),
                 commands::mes_colles(),
                 commands::toutes_les_colles(),

@@ -86,13 +86,13 @@ pub type RoomNumber = String;
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Colle {
-    template_id: ColleTemplateId,
-    group_id: GroupId,
-    pub(crate) start: OffsetDateTime,
-    pub(crate) end: OffsetDateTime,
+    pub template_id: ColleTemplateId,
+    pub group_id: GroupId,
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ResolvedColle<'g, 's> {
     pub template: &'g ColleTemplate,
     pub group: &'g Group,

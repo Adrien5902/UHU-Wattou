@@ -1,13 +1,13 @@
-use poise::CreateReply;
-
 use crate::{
     bot::Context,
-    data::{colle::ColleStringFormat, guild::GuildData},
+    data::{colle::ColleStringFormat, prof::Prof},
 };
-
-use std::{fmt::Write, sync::Arc};
-
-use color_eyre::Result;
+use color_eyre::{Result, eyre::eyre};
+use poise::{
+    CreateReply,
+    serenity_prelude::{AutocompleteChoice, CreateAutocompleteResponse},
+};
+use std::fmt::Write;
 
 #[poise::command(slash_command)]
 pub async fn colles_de_prof(
@@ -19,25 +19,29 @@ pub async fn colles_de_prof(
 ) -> Result<()> {
     ctx.defer_ephemeral().await?;
     let limit = limit.and_then(|l| (l < 100).then_some(l)).unwrap_or(5);
-    let data = GuildData::from_ctx(ctx)?;
+    let mut data = ctx.data().lock().await;
+    let guild_data = data.guild_from_ctx(ctx)?;
 
-    let Some(prof) = ctx
-        .data()
-        .lock()
-        .unwrap()
+    let Some((id, _prof)) = guild_data
+        .persistent
         .profs
-        .get(&Arc::from(prof_str))
-        .map(|p| p.clone())
+        .iter()
+        .enumerate()
+        .find(|(_, p)| p.name() == prof_str)
     else {
-        todo!("impl error");
+        Err(eyre!("Can't find prof with name {}", prof_str))?
     };
 
     let mut content = String::new();
-    content.write_fmt(format_args!("Prochaines colles pour {}:", prof.name()))?;
+    content.write_fmt(format_args!("Prochaines colles pour {}:", prof_str))?;
 
-    for (group_id, colle) in prof.get_next_colles_in_guild(data, limit) {
+    for colle in Prof::get_next_colles(id, &guild_data.persistent, limit) {
         content.push_str("\n- ");
-        colle.format(&mut content, ColleStringFormat::ForProf(group_id))?;
+        colle.format(
+            &mut content,
+            ColleStringFormat::Implicit,
+            &guild_data.persistent,
+        )?;
     }
 
     ctx.send(
@@ -51,20 +55,31 @@ pub async fn colles_de_prof(
     Ok(())
 }
 
-pub async fn autocomplete_prof(ctx: Context<'_>, partial: &str) -> Vec<String> {
-    let input = easy_comp_string(partial);
-    ctx.data()
-        .lock()
-        .unwrap()
-        .profs
-        .iter()
-        .filter_map(|(_, p)| {
-            let name = p.name();
-            easy_comp_string(name)
-                .contains(&input)
-                .then_some(name.to_owned())
-        })
-        .collect::<Vec<_>>()
+pub async fn autocomplete_prof(ctx: Context<'_>, partial: &str) -> CreateAutocompleteResponse {
+    let opt = (async || {
+        let input = easy_comp_string(partial);
+        let mut data = ctx.data().lock().await;
+        let guild_data = data.guild_from_ctx(ctx).ok()?;
+        let completions = guild_data
+            .persistent
+            .profs
+            .iter()
+            .filter_map(|p| {
+                let name = p.name();
+                easy_comp_string(name)
+                    .contains(&input)
+                    .then_some(name.to_owned())
+            })
+            .collect::<Vec<_>>();
+        Some(completions)
+    })()
+    .await;
+    CreateAutocompleteResponse::new().set_choices(
+        opt.unwrap_or_default()
+            .into_iter()
+            .map(|c| AutocompleteChoice::new(c.clone(), c))
+            .collect(),
+    )
 }
 
 fn easy_comp_string(s: &str) -> String {

@@ -1,8 +1,9 @@
 use std::fmt::Display;
 
-use crate::data::{guild::GuildDataPersistent, resolve::Resolve};
+use crate::data::{colle::ResolvedColle, guild::GuildDataPersistent, resolve::Resolve};
 use color_eyre::eyre::Result;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Prof {
@@ -52,27 +53,22 @@ impl Resolve for Prof {
 }
 
 impl Prof {
-    // pub fn get_next_colles(
-    //     &self,
-    //     guild_data: Arc<GuildData>,
-    //     limit: usize,
-    // ) -> Vec<(GroupId, Colle)> {
-    //     let now = OffsetDateTime::now_utc();
-    //     let mut colles = guild_data
-    //         .persistent
-    //         .groups
-    //         .iter()
-    //         .flat_map(|groupe| {
-    //             groupe.colles.iter().filter_map(|colle| {
-    //                 (*self == *colle.get_template(&guild_data).prof && colle.end > now)
-    //                     .then_some((groupe.id, colle.clone()))
-    //             })
-    //         })
-    //         .collect::<Vec<_>>();
-    //     colles.sort_by(|(_, a), (_, b)| a.cmp(b));
-    //
-    //     colles[..limit].to_vec()
-    // }
+    pub fn get_next_colles<'g: 's, 's>(
+        id: ProfId,
+        guild_data: &'g GuildDataPersistent,
+        limit: usize,
+    ) -> Box<[ResolvedColle<'g, 's>]> {
+        let now = OffsetDateTime::now_utc();
+        guild_data
+            .colles
+            .iter()
+            .filter_map(|colle| {
+                let resolved = colle.resolve(guild_data).ok()?;
+                (id == resolved.template.prof && colle.end > now).then_some(resolved)
+            })
+            .take(limit)
+            .collect()
+    }
 
     pub fn name(&self) -> &str {
         &self.name

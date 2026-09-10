@@ -46,7 +46,7 @@ impl Resolve for Group {
 }
 
 impl<'g, 's> ResolvedGroup<'g, 's> {
-    pub fn get_next_colles(&self, limit: usize) -> Vec<&Colle> {
+    pub fn get_next_colles(&self, limit: usize) -> Box<[&Colle]> {
         let now = OffsetDateTime::now_utc();
         self.colles
             .iter()

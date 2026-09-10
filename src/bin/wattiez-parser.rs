@@ -107,7 +107,6 @@ impl WattiezDataDir {
         let weeks_dates = self.read_weeks_data()?;
         let colloscope = fs::read_to_string(self.path.join(Self::FILE_NAME_COLLOSCOPE))?;
         let mut colles = Vec::new();
-
         let mut lines = colloscope.lines();
 
         let first_line = lines.next().unwrap();
@@ -132,7 +131,6 @@ impl WattiezDataDir {
                 })
                 .collect::<Result<Vec<Vec<_>>>>()?;
 
-            let mut this_group_s_colles = Vec::new();
             for (j, weeks) in week_numbers.iter().enumerate() {
                 let templates_for_this_week = &week_templates[j];
 
@@ -141,7 +139,6 @@ impl WattiezDataDir {
                         let date = Self::get_date(&weeks_dates, *week_number, template.day);
                         let colle = Colle::from_template(template, date, group_id)?;
 
-                        this_group_s_colles.push(colles.len());
                         colles.push(colle);
                     }
                 }
@@ -149,8 +146,14 @@ impl WattiezDataDir {
 
             groups.push(Group {
                 id: group_id,
-                colles: this_group_s_colles,
+                colles: Vec::new(),
             });
+        }
+
+        // Colles needs to be sorted
+        colles.sort();
+        for (i, colle) in colles.iter().enumerate() {
+            groups[colle.group_id].colles.push(i);
         }
 
         Ok(GuildDataPersistent {
