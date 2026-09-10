@@ -35,6 +35,6 @@ impl GlobalData {
         let guild_id = ctx
             .guild_id()
             .ok_or(WattouError::CommandCanOnlyBeUsedInGuilds)?;
-        Ok(self.get_guild(guild_id)?)
+        self.get_guild(guild_id)
     }
 }

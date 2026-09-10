@@ -35,7 +35,7 @@ impl<T: RefreshableMessageKind> RefreshableMessage<T> {
             "new refreshable message : {:?} {} {}",
             kind, message.id, message.channel_id,
         );
-        Ok(Self::from_message(&*message, kind))
+        Ok(Self::from_message(&message, kind))
     }
 
     pub fn from_message(message: &Message, kind: T) -> Self {

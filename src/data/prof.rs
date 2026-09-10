@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::data::{guild::GuildDataPersistent, resolve::Resolve};
 use color_eyre::eyre::Result;
 use serde::{Deserialize, Serialize};
@@ -14,13 +16,16 @@ impl PartialEq for Prof {
 }
 
 impl Eq for Prof {}
-impl ToString for Prof {
-    fn to_string(&self) -> String {
-        self.name.to_string()
+impl Display for Prof {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
     }
 }
 
-impl<T> From<T> for Prof where T: Into<Box<str>>{
+impl<T> From<T> for Prof
+where
+    T: Into<Box<str>>,
+{
     fn from(value: T) -> Self {
         Prof { name: value.into() }
     }

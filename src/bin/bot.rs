@@ -3,16 +3,11 @@
 use color_eyre::Result;
 use dotenv::dotenv;
 use poise::serenity_prelude::{
-    self as serenity, ActivityData, ActivityType, Client, FullEvent, GatewayIntents,
-    GuildId, 
+    self as serenity, ActivityData, ActivityType, Client, FullEvent, GatewayIntents, GuildId,
 };
 use std::env;
 use tokio::sync::Mutex;
-use wattou_bot::{
-    bot::GlobalData,
-    commands, debug,
-    error::WattouError,
-};
+use wattou_bot::{bot::GlobalData, commands, debug, error::WattouError};
 
 async fn event_handler(
     framework: poise::FrameworkContext<'_, Mutex<GlobalData>, color_eyre::Report>,
@@ -35,7 +30,7 @@ async fn event_handler(
                 url: None,
             }));
 
-            if let Err(e) = refresh_messages(&ctx, data).await {
+            if let Err(e) = refresh_messages(ctx, data).await {
                 debug!("Error : {:?}", e);
             }
         }

@@ -13,7 +13,12 @@ use color_eyre::{
     eyre::{self, eyre},
 };
 use serde::{Deserialize, Deserializer, Serialize};
-use std::{borrow::Cow, cmp::Ordering, fmt::Write, str::FromStr};
+use std::{
+    borrow::Cow,
+    cmp::Ordering,
+    fmt::{Display, Write},
+    str::FromStr,
+};
 use time::{Date, OffsetDateTime, macros::format_description};
 
 /// e.g. : M4 (Maths n°4)
@@ -49,9 +54,10 @@ impl ColleTemplateId {
     }
 }
 
-impl ToString for ColleTemplateId {
-    fn to_string(&self) -> String {
-        self.0.to_string() + &self.1.to_string()
+impl Display for ColleTemplateId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_char(self.0)?;
+        f.write_str(&self.1.to_string())
     }
 }
 
@@ -189,7 +195,7 @@ impl<'g, 's> ResolvedColle<'g, 's> {
                     self.template.id.to_string(),
             },
             Jour::from(self.colle.start.weekday()).as_str(),
-            self.colle.start.day().to_string(),
+            self.colle.start.day(),
             month_to_short_fr(self.colle.start.month()),
             self.colle.horaire(),
             match format {
@@ -200,7 +206,7 @@ impl<'g, 's> ResolvedColle<'g, 's> {
                         .name()
                 ),
             },
-            &self.template.room,
+            self.template.room,
         ))?;
         Ok(())
     }

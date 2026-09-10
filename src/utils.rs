@@ -14,7 +14,7 @@ pub fn write_to_log(s: &str) -> io::Result<()> {
         .create(true)
         .append(true)
         .open("latest.log")?;
-    f.write_all(&st.as_bytes())?;
+    f.write_all(st.as_bytes())?;
     f.write_all(b"\n")?;
     f.flush()
 }
@@ -27,7 +27,7 @@ macro_rules! debug {
             #[cfg(not(debug_assertions))]
             {
                 // in release mode
-                let _ = crate::utils::write_to_log(&s);
+                let _ = write_to_log(&s);
             }
             #[cfg(debug_assertions)]
             {
@@ -114,8 +114,8 @@ impl Jour {
     }
 }
 
-impl Into<&'static str> for Jour {
-    fn into(self) -> &'static str {
-        self.as_str()
+impl From<Jour> for &'static str {
+    fn from(value: Jour) -> Self {
+        value.as_str()
     }
 }

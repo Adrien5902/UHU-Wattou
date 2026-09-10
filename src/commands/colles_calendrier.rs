@@ -1,6 +1,11 @@
 use crate::{
-    bot::Context, data::{
-        colle::ResolvedColle, group::{Group, GroupId}, guild::GuildDataPersistent, prof::Prof, resolve::Resolve,
+    bot::Context,
+    data::{
+        colle::ResolvedColle,
+        group::{Group, GroupId},
+        guild::GuildDataPersistent,
+        prof::Prof,
+        resolve::Resolve,
     },
 };
 use color_eyre::{
@@ -34,7 +39,8 @@ impl<'g: 's, 's> ResolvedColle<'g, 's> {
             .unwrap();
 
         let mut event = Event::new(Uuid::new_v4().to_string(), start.clone());
-        let prof = Prof::from_id(&self.template.prof, guild_data).ok_or_else(|| eyre!("error :("))?;
+        let prof =
+            Prof::from_id(&self.template.prof, guild_data).ok_or_else(|| eyre!("error :("))?;
 
         event.push(Organizer::new(prof.name()));
         event.push(DtStart::new(start));
@@ -42,14 +48,14 @@ impl<'g: 's, 's> ResolvedColle<'g, 's> {
         event.push(ICS_CATEGORY.clone());
         event.push(Summary::new(format!(
             "Colle {} avec {}",
-            &self.template.id.explicit(),
-            &self.template.prof.to_string()
+            self.template.id.explicit(),
+            self.template.prof,
         )));
         event.push(Description::new(format!(
             "Colle {} avec {} en salle {} de {}",
-            &self.template.id.explicit(),
+            self.template.id.explicit(),
             prof.name(),
-            &self.template.room,
+            self.template.room,
             self.colle.horaire()
         )));
 
@@ -58,7 +64,7 @@ impl<'g: 's, 's> ResolvedColle<'g, 's> {
 }
 
 impl Group {
-    fn ics_calendar<'a>(&self, guild_data: &GuildDataPersistent) -> Result<String> {
+    fn ics_calendar(&self, guild_data: &GuildDataPersistent) -> Result<String> {
         let mut calendar = ICalendar::new(
             "2.0",
             format!("-//Wattou//Calendrier de colle groupe {}//FR", self.id),

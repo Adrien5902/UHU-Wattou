@@ -6,7 +6,8 @@ pub async fn toutes_les_colles(ctx: Context<'_>) -> Result<()> {
     ctx.defer().await?;
     let mut data = ctx.data().lock().await;
     let guild_data = data.guild_mut_from_ctx(ctx)?;
-    guild_data.mutable
+    guild_data
+        .mutable
         .toutes_les_colles_msg
         .set_from_ctx(&guild_data.persistent, ToutesLesCollesMessage, ctx)
         .await?;

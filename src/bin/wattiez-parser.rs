@@ -121,14 +121,14 @@ impl WattiezDataDir {
             let week_templates: Vec<Vec<ColleTemplate>> = line
                 .split(" ")
                 .map(|s| {
-                    Ok(s.split("+")
+                    s.split("+")
                         .map(|colle_id| {
                             Ok(colle_templates
                                 .get(&ColleTemplateId::from_str(colle_id)?)
                                 .ok_or(WattouError::ColleParsingFailed(ColleParsingError::Unknown))?
                                 .clone())
                         })
-                        .collect::<Result<Vec<_>>>()?)
+                        .collect::<Result<Vec<_>>>()
                 })
                 .collect::<Result<Vec<Vec<_>>>>()?;
 

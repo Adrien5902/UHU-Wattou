@@ -131,7 +131,7 @@ impl RefreshableMessageKind for ToutesLesCollesMessage {
         let mut final_message = String::new();
 
         for group in &guild_data.groups {
-            let resolved = group.resolve(&guild_data)?;
+            let resolved = group.resolve(guild_data)?;
             let next_colles = resolved.get_next_colles(2);
             final_message.push_str("\n## Groupe ");
             final_message.push_str(&group.id.to_string());
@@ -143,7 +143,7 @@ impl RefreshableMessageKind for ToutesLesCollesMessage {
             if !next_colles.is_empty() {
                 for colle in next_colles {
                     final_message.push_str("\n- ");
-                    colle.resolve(&guild_data)?.format(
+                    colle.resolve(guild_data)?.format(
                         &mut final_message,
                         ColleStringFormat::Implicit,
                         guild_data,

@@ -52,7 +52,7 @@ impl<'g, 's> ResolvedGroup<'g, 's> {
             .iter()
             .filter(|colle| colle.end > now)
             .take(limit)
-            .map(|c| *c)
+            .copied()
             .collect()
     }
 }

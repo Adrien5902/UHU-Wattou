@@ -1,6 +1,6 @@
 use color_eyre::eyre::Result;
 
-use crate::data::guild::{GuildDataPersistent};
+use crate::data::guild::GuildDataPersistent;
 
 pub trait Resolve {
     type ResolvedSelf<'g, 's>
