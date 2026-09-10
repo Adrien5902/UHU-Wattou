@@ -1,7 +1,7 @@
 use poise::CreateReply;
 
 use crate::{
-    Context,
+    bot::Context,
     data::{colle::ColleStringFormat, guild::GuildData},
 };
 

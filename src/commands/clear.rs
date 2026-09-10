@@ -1,4 +1,4 @@
-use crate::Context;
+use crate::bot::Context;
 use color_eyre::Result;
 
 #[poise::command(slash_command)]

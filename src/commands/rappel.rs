@@ -1,5 +1,5 @@
 use crate::{
-    Context,
+    bot::Context,
     data::{guild::GuildData, subscriber::SubscriberData},
     debug,
 };

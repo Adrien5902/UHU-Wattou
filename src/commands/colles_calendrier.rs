@@ -1,27 +1,26 @@
 use crate::{
-    Context,
-    data::{
-        colle::Colle,
-        group::{Group, GroupId},
-        guild::GuildData,
+    bot::Context, data::{
+        colle::ResolvedColle, group::{Group, GroupId}, guild::GuildDataPersistent, prof::Prof, resolve::Resolve,
     },
 };
-use color_eyre::{Result, eyre};
+use color_eyre::{
+    Result,
+    eyre::{self, eyre},
+};
 use ics::{
     Event, ICalendar,
     properties::{Categories, Description, DtEnd, DtStart, Organizer, Summary},
 };
 use once_cell::sync::Lazy;
-use poise::CreateReply;
-use serenity::all::CreateAttachment;
+use poise::{CreateReply, serenity_prelude::CreateAttachment};
 use time::format_description::well_known::Iso8601;
 use uuid::Uuid;
 
 const ICS_CATEGORY: Lazy<Categories> = Lazy::new(|| Categories::new("Colles"));
 
-impl Colle {
-    fn to_ics_event(&self) -> Result<Event<'_>> {
-        let [start, end]: [String; 2] = [self.start, self.end]
+impl<'g: 's, 's> ResolvedColle<'g, 's> {
+    pub fn to_ics_event<'e>(&self, guild_data: &'e GuildDataPersistent) -> Result<Event<'e>> {
+        let [start, end]: [String; 2] = [self.colle.start, self.colle.end]
             .iter()
             .map(|date| {
                 Ok(date
@@ -35,8 +34,9 @@ impl Colle {
             .unwrap();
 
         let mut event = Event::new(Uuid::new_v4().to_string(), start.clone());
+        let prof = Prof::from_id(&self.template.prof, guild_data).ok_or_else(|| eyre!("error :("))?;
 
-        event.push(Organizer::new(self.template.prof.to_string()));
+        event.push(Organizer::new(prof.name()));
         event.push(DtStart::new(start));
         event.push(DtEnd::new(end));
         event.push(ICS_CATEGORY.clone());
@@ -48,9 +48,9 @@ impl Colle {
         event.push(Description::new(format!(
             "Colle {} avec {} en salle {} de {}",
             &self.template.id.explicit(),
-            &self.template.prof.to_string(),
+            prof.name(),
             &self.template.room,
-            self.horaire()
+            self.colle.horaire()
         )));
 
         Ok(event)
@@ -58,15 +58,18 @@ impl Colle {
 }
 
 impl Group {
-    fn ics_calendar<'a>(&self) -> Result<String> {
+    fn ics_calendar<'a>(&self, guild_data: &GuildDataPersistent) -> Result<String> {
         let mut calendar = ICalendar::new(
             "2.0",
             format!("-//Wattou//Calendrier de colle groupe {}//FR", self.id),
         );
 
+        let resoled = self.resolve(guild_data)?;
         // create event which contains the information regarding the conference
-        for colle in self.colles.iter() {
-            calendar.add_event(colle.to_ics_event()?);
+        for colle in resoled.colles.iter() {
+            let resolved_colle = colle.resolve(guild_data)?;
+            let event = resolved_colle.to_ics_event(guild_data)?;
+            calendar.add_event(event);
         }
 
         let mut writer = Vec::new();
@@ -83,14 +86,17 @@ pub async fn colles_calendrier(
     group_id: GroupId,
 ) -> Result<()> {
     ctx.defer_ephemeral().await?;
-    let data = GuildData::from_ctx(ctx)?;
+    let mut data = ctx.data().lock().await;
+    let guild_data = data.guild_from_ctx(ctx)?;
 
     ctx.send(
         CreateReply::default()
             .ephemeral(true)
             .attachment(CreateAttachment::bytes(
-                data.get_group(group_id)?.ics_calendar()?,
-                format!("Calendrier de colles group {}.ics", group_id),
+                Group::from_id(&group_id, &guild_data.persistent)
+                    .ok_or_else(|| eyre!("error :("))?
+                    .ics_calendar(&guild_data.persistent)?,
+                format!("Calendrier de colles du groupe {}.ics", group_id),
             ))
             .content("Importe le fichier dans ton calendrier pour y ajouter les colles !"),
     )

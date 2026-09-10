@@ -1,15 +1,12 @@
 alias w := watch
-watch:
-    watchexec cargo run
-
-alias b := build
-build:
-    cargo b -r
-
 alias r := run
-run:
-    cargo run
+alias b := build
 
-alias i := install
-install:
-    cargo install --locked --path .
+watch:
+    watchexec -r cargo run --bin bot
+
+build:
+    cargo b -r --bin bot
+
+run:
+    cargo run --bin bot

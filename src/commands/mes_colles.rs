@@ -1,6 +1,6 @@
 use crate::{
-    Context,
-    data::{colle::ColleStringFormat, group::GroupId, guild::GuildData},
+    bot::Context,
+    data::{colle::ColleStringFormat, group::GroupId, resolve::Resolve},
 };
 use color_eyre::Result;
 use poise::CreateReply;
@@ -14,7 +14,8 @@ pub async fn mes_colles(
     group_id: GroupId,
 ) -> Result<()> {
     ctx.defer_ephemeral().await?;
-    let guild_data = GuildData::from_ctx(ctx)?;
+    let mut data = ctx.data().lock().await;
+    let guild_data = data.guild_from_ctx(ctx)?;
     let group = guild_data.get_group(group_id)?;
 
     let mut content = String::new();
@@ -22,9 +23,16 @@ pub async fn mes_colles(
         "Prochaines colles pour le groupe {}:",
         group.id
     ))?;
-    for colle in group.get_next_colles(5) {
+
+    let resolved = group.resolve(&guild_data.persistent)?;
+    for colle in resolved.get_next_colles(5) {
+        let resolved_colle = colle.resolve(&guild_data.persistent)?;
         content.push_str("\n- ");
-        colle.format(&mut content, ColleStringFormat::Explicit)?;
+        resolved_colle.format(
+            &mut content,
+            ColleStringFormat::Explicit,
+            &guild_data.persistent,
+        )?;
     }
 
     ctx.send(

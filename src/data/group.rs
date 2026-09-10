@@ -1,43 +1,46 @@
 use crate::data::{
     colle::{Colle, ColleId},
+    guild::GuildDataPersistent,
     resolve::Resolve,
 };
+use color_eyre::eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
-use serenity::all::GuildId;
 use time::OffsetDateTime;
 
 pub type GroupId = usize;
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Group {
-    guild_id: GuildId,
-    id: GroupId,
-    colles: Box<[ColleId]>,
+    pub id: GroupId,
+    pub colles: Vec<ColleId>,
 }
 
 pub struct ResolvedGroup<'g, 's> {
-    group: &'s Group,
-    colles: Box<[&'g Colle]>,
+    pub group: &'s Group,
+    pub colles: Box<[&'g Colle]>,
 }
 
 impl Resolve for Group {
     type Id = GroupId;
-    type ResolvedSelf<'g, 's> = ResolvedGroup<'g, 's>;
-    fn from_id<'g>(id: &Self::Id, guild_data: &'g super::guild::GuildData) -> Option<&'g Self> {
-        guild_data.persistent.groups.get(*id)
+    type ResolvedSelf<'g: 's, 's> = ResolvedGroup<'g, 's>;
+    fn from_id<'g>(id: &Self::Id, guild_data: &'g GuildDataPersistent) -> Option<&'g Self> {
+        guild_data.groups.get(*id - 1)
     }
 
     fn resolve<'s, 'g: 's>(
         &'s self,
-        guild_data: &'g super::guild::GuildData,
-    ) -> Option<Self::ResolvedSelf<'g, 's>> {
-        Some(Self::ResolvedSelf {
+        guild_data: &'g GuildDataPersistent,
+    ) -> Result<Self::ResolvedSelf<'g, 's>> {
+        Ok(Self::ResolvedSelf {
             group: self,
             colles: self
                 .colles
                 .iter()
-                .map(|id| Colle::from_id(id, guild_data))
-                .collect::<Option<_>>()?,
+                .map(|id| {
+                    Colle::from_id(id, guild_data)
+                        .ok_or_else(|| eyre!("cant resolve colle {id} for group {}", self.id))
+                })
+                .collect::<Result<_>>()?,
         })
     }
 }

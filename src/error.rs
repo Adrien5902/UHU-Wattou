@@ -1,5 +1,5 @@
 use crate::data::group::GroupId;
-use serenity::all::GuildId;
+use poise::serenity_prelude::GuildId;
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq, Error)]
