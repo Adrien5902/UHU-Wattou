@@ -71,6 +71,13 @@ impl<T: RefreshableMessageKind> OptionalRefreshableMessage<T> {
         kind: T,
         ctx: Context<'_>,
     ) -> Result<()> {
+        if let Some(old_message) = &self.0 {
+            old_message
+                .channel_id
+                .delete_message(ctx.http(), old_message.message_id)
+                .await?;
+        }
+
         self.0 = Some(RefreshableMessage::<T>::from_ctx(guild_data, ctx, kind).await?);
         Ok(())
     }
