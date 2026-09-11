@@ -39,7 +39,7 @@ pub async fn colles_de_prof(
         content.push_str("\n- ");
         colle.format(
             &mut content,
-            ColleStringFormat::Implicit,
+            ColleStringFormat::ForProf(colle.colle.group_id),
             &guild_data.persistent,
         )?;
     }
