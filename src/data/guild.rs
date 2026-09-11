@@ -13,15 +13,16 @@ use crate::{
 use color_eyre::Result;
 use poise::serenity_prelude::{GuildId, Http};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 use time::{OffsetDateTime, Weekday};
+use tokio::sync::Mutex;
 
 pub type WeekId = usize;
 
 #[derive(Debug)]
 pub struct GuildData {
     pub persistent: GuildDataPersistent,
-    pub mutable: GuildDataMutable,
+    pub mutable: Arc<Mutex<GuildDataMutable>>,
     pub guild_id: GuildId,
 }
 
@@ -62,7 +63,7 @@ impl GuildData {
 
         let data = Self {
             guild_id,
-            mutable,
+            mutable: Arc::new(Mutex::new(mutable)),
             persistent,
         };
 
@@ -86,20 +87,24 @@ impl GuildData {
 
     pub async fn refresh_messages(&self, http: &Http) -> Result<()> {
         self.mutable
+            .lock()
+            .await
             .toutes_les_colles_msg
             .refresh_if_some(http, &self.persistent)
             .await?;
         self.mutable
+            .lock()
+            .await
             .semaine_tp_msg
             .refresh_if_some(http, &self.persistent)
             .await?;
         Ok(())
     }
 
-    pub fn save(&self) -> Result<()> {
+    pub async fn save(&self) -> Result<()> {
         Ok(fs::write(
             Self::folder(self.guild_id).join(Self::MUTABLE_DATA_FILE),
-            ron::to_string(&self.mutable)?,
+            ron::to_string(&*self.mutable.lock().await)?,
         )?)
     }
 }
