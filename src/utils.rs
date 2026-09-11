@@ -26,7 +26,7 @@ macro_rules! debug {
             #[cfg(not(debug_assertions))]
             {
                 // in release mode
-                let _ = write_to_log(&s);
+                let _ = $crate::utils::write_to_log(&s);
             }
             #[cfg(debug_assertions)]
             {
