@@ -98,6 +98,7 @@ impl GuildData {
             .semaine_tp_msg
             .refresh_if_some(http, &self.persistent)
             .await?;
+        self.save().await?;
         Ok(())
     }
 

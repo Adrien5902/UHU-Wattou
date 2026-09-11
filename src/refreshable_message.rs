@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
 use crate::{bot::Context, data::guild::GuildDataPersistent, debug};
-use color_eyre::eyre::{Ok, Result};
-use poise::serenity_prelude::{ChannelId, EditMessage, Http, Message, MessageId};
+use color_eyre::eyre::{Ok, Result, eyre};
+use poise::serenity_prelude::{self, ChannelId, EditMessage, Http, Message, MessageId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -13,13 +13,35 @@ pub struct RefreshableMessage<T: RefreshableMessageKind> {
 }
 
 impl<T: RefreshableMessageKind> RefreshableMessage<T> {
-    async fn refresh(&self, http: &Http, guild_data: &GuildDataPersistent) -> Result<()> {
+    /// Returns true if message was found, false otherwise
+    async fn refresh(&self, http: &Http, guild_data: &GuildDataPersistent) -> Result<bool> {
         let content = self.kind.content(guild_data)?;
-        self.channel_id
+        if let Err(e) = self
+            .channel_id
             .edit_message(http, self.message_id, EditMessage::new().content(content))
-            .await?;
-        println!("refreshed message {:?} for guild", self.kind);
-        Ok(())
+            .await
+        {
+            if let serenity_prelude::Error::Http(http_error) = &e
+                && http_error
+                    .status_code()
+                    .ok_or(eyre!("no status code for request"))?
+                    == 404
+            {
+                debug!(
+                    "message not found {:?} for guild TODO INSERT GUILD_ID, removing...",
+                    self.kind
+                );
+                return Ok(false);
+            } else {
+                Err(e)?
+            }
+        }
+
+        println!(
+            "refreshed message {:?} for guild TODO INSERT GUILD_ID",
+            self.kind
+        );
+        Ok(true)
     }
 
     pub async fn from_ctx(
@@ -55,12 +77,14 @@ pub trait RefreshableMessageKind: Debug {
 pub struct OptionalRefreshableMessage<T: RefreshableMessageKind>(pub Option<RefreshableMessage<T>>);
 impl<T: RefreshableMessageKind> OptionalRefreshableMessage<T> {
     pub async fn refresh_if_some(
-        &self,
+        &mut self,
         http: &Http,
         guild_data: &GuildDataPersistent,
     ) -> Result<()> {
         if let Some(message) = &self.0 {
-            message.refresh(http, guild_data).await?;
+            if !message.refresh(http, guild_data).await?{
+                self.0 = None
+            }
         }
         Ok(())
     }
