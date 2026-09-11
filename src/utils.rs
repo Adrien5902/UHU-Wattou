@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::OpenOptions,
     io::{self, Write},
-    str::FromStr,
 };
 use time::{Month, OffsetDateTime, Weekday};
 
@@ -83,10 +82,8 @@ impl PartialOrd for Jour {
     }
 }
 
-impl FromStr for Jour {
-    type Err = color_eyre::eyre::Report;
-
-    fn from_str(s: &str) -> Result<Self> {
+impl Jour {
+    pub fn from_str_short(s: &str) -> Result<Self> {
         Ok(Self(match s {
             "Lu" => Weekday::Monday,
             "Ma" => Weekday::Tuesday,
@@ -95,6 +92,19 @@ impl FromStr for Jour {
             "Ve" => Weekday::Friday,
             "Sa" => Weekday::Saturday,
             "Di" => Weekday::Sunday,
+            _ => Err(WattouError::FailedToParseDayString)?,
+        }))
+    }
+
+    pub fn from_str_long(s: &str) -> Result<Self> {
+        Ok(Self(match s {
+            "Lundi" => Weekday::Monday,
+            "Mardi" => Weekday::Tuesday,
+            "Mercredi" => Weekday::Wednesday,
+            "Jeudi" => Weekday::Thursday,
+            "Vendredi" => Weekday::Friday,
+            "Samedi" => Weekday::Saturday,
+            "Dimanche" => Weekday::Sunday,
             _ => Err(WattouError::FailedToParseDayString)?,
         }))
     }

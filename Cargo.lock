@@ -2296,12 +2296,13 @@ dependencies = [
 name = "wattou-bot"
 version = "0.1.0"
 dependencies = [
- "bitflags",
  "color-eyre",
  "dotenv",
  "ics",
  "once_cell",
  "poise",
+ "regex",
+ "reqwest",
  "ron",
  "serde",
  "thiserror 2.0.20",

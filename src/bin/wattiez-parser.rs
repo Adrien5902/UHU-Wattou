@@ -1,7 +1,6 @@
-use std::{collections::HashMap, env::args, fs, path::PathBuf, str::FromStr};
-
 use color_eyre::eyre::Result;
-use time::{Date, Duration, macros::format_description};
+use std::{collections::HashMap, env::args, fs, path::PathBuf, str::FromStr};
+use time::{Date, SignedDuration, macros::format_description};
 use wattou_bot::{
     data::{
         colle::{Colle, ColleTemplate, ColleTemplateId},
@@ -62,7 +61,7 @@ impl WattiezDataDir {
             let jour_str = words_vec
                 .pop()
                 .ok_or(WattouError::ColleParsingFailed(ColleParsingError::Unknown))?;
-            let day = Jour::from_str(jour_str)?;
+            let day = Jour::from_str_short(jour_str)?;
 
             let prof_str = words_vec.join(" ");
 
@@ -167,7 +166,7 @@ impl WattiezDataDir {
 
     pub fn get_date(weeks: &[Date], week: usize, day: Jour) -> Date {
         weeks[week - 1]
-            .saturating_sub(Duration::days(7))
+            .saturating_sub(SignedDuration::days(7))
             .next_occurrence(day.inner())
     }
 }
