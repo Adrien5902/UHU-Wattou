@@ -15,7 +15,7 @@ dotenv = "0.15"
 poise = "0.7.0"
 time = { version = "0.3.48", features = ["parsing", "macros", "local-offset"] }
 ics = "0.5.8"
-uuid = { version = "1.23.3", features = ["v4"] }
+uuid = { version = "1.23.3", features = ["v5"] }
 once_cell = "1.21.4"
 thiserror = "2.0.18"
 bitflags = { version = "2.13.0", features = ["serde"] }
