@@ -153,7 +153,7 @@ impl WattiezDataDir {
         // Colles needs to be sorted
         colles.sort();
         for (i, colle) in colles.iter().enumerate() {
-            groups[colle.group_id].colles.push(i);
+            groups[colle.group_id - 1].colles.push(i);
         }
 
         Ok(GuildDataPersistent {
