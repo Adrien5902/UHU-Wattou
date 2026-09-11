@@ -64,12 +64,12 @@ impl<'g: 's, 's> ResolvedColle<'g, 's> {
         event.push(Summary::new(format!(
             "Colle {} avec {}",
             self.template.id.explicit(),
-            self.template.prof,
+            prof,
         )));
         event.push(Description::new(format!(
             "Colle {} avec {} en salle {} de {}",
             self.template.id.explicit(),
-            prof.name(),
+            prof,
             self.template.room,
             self.colle.horaire()
         )));
