@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
                         profs.len() - 1
                     });
 
-                let template_opt = colle_templates
+                let template_id = colle_templates
                     .iter()
                     .find(|(_, t)| {
                         t.prof == prof
@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
                     .map(|(id, _)| id)
                     .copied()
                     .unwrap_or_else(|| {
-                        let template_id = ColleTemplateId(
+                        let id = ColleTemplateId(
                             matiere.chars().next().unwrap(),
                             colle_templates.len() as u8,
                         );
@@ -103,15 +103,15 @@ async fn main() -> Result<()> {
                             day,
                             prof,
                             room,
-                            id: template_id,
                         };
-                        colle_templates.insert(template_id, template);
-                        template_id
+                        colle_templates.insert(id, template);
+                        id
                     });
 
-                let template = colle_templates.get(&template_opt).unwrap();
+                let template = colle_templates.get(&template_id).unwrap();
 
                 let colle = Colle::from_template(
+                    template_id,
                     template,
                     week_first_day
                         .saturating_sub(SignedDuration::days(1))

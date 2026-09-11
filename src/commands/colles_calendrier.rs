@@ -63,12 +63,12 @@ impl<'g: 's, 's> ResolvedColle<'g, 's> {
         event.push(ICS_CATEGORY.clone());
         event.push(Summary::new(format!(
             "Colle {} avec {}",
-            self.template.id.explicit(),
+            self.colle.template_id.explicit(),
             prof,
         )));
         event.push(Description::new(format!(
             "Colle {} avec {} en salle {} de {}",
-            self.template.id.explicit(),
+            self.colle.template_id.explicit(),
             prof,
             self.template.room,
             self.colle.horaire()

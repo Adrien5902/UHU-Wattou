@@ -78,7 +78,6 @@ impl WattiezDataDir {
             templates.insert(
                 id,
                 ColleTemplate {
-                    id,
                     prof: prof_id,
                     room: room_number.to_owned(),
                     day,
@@ -116,27 +115,28 @@ impl WattiezDataDir {
 
         for (i, line) in lines.enumerate() {
             let group_id = i + 1;
-            let week_templates: Vec<Vec<ColleTemplate>> = line
-                .split(" ")
-                .map(|s| {
-                    s.split("+")
-                        .map(|colle_id| {
-                            Ok(colle_templates
-                                .get(&ColleTemplateId::from_str(colle_id)?)
-                                .ok_or(WattouError::ColleParsingFailed(ColleParsingError::Unknown))?
-                                .clone())
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })
-                .collect::<Result<Vec<Vec<_>>>>()?;
+            let week_templates: Vec<Vec<(ColleTemplateId, &ColleTemplate)>> =
+                line.split(" ")
+                    .map(|s| {
+                        s.split("+")
+                            .map(|colle_id| {
+                                let id = ColleTemplateId::from_str(colle_id)?;
+                                let template = colle_templates.get(&id).ok_or(
+                                    WattouError::ColleParsingFailed(ColleParsingError::Unknown),
+                                )?;
+                                Ok((id, template))
+                            })
+                            .collect::<Result<Vec<_>>>()
+                    })
+                    .collect::<Result<_>>()?;
 
             for (j, weeks) in week_numbers.iter().enumerate() {
                 let templates_for_this_week = &week_templates[j];
 
                 for week_number in weeks {
-                    for template in templates_for_this_week {
+                    for (id, template) in templates_for_this_week {
                         let date = Self::get_date(&weeks_dates, *week_number, template.day);
-                        let colle = Colle::from_template(template, date, group_id)?;
+                        let colle = Colle::from_template(*id, template, date, group_id)?;
 
                         colles.push(colle);
                     }

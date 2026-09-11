@@ -101,7 +101,6 @@ pub struct ResolvedColle<'g, 's> {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ColleTemplate {
-    pub id: ColleTemplateId,
     pub prof: ProfId,
     pub room: RoomNumber,
 
@@ -146,12 +145,17 @@ impl Colle {
             .join("-")
     }
 
-    pub fn from_template(template: &ColleTemplate, date: Date, group_id: GroupId) -> Result<Self> {
+    pub fn from_template(
+        template_id: ColleTemplateId,
+        template: &ColleTemplate,
+        date: Date,
+        group_id: GroupId,
+    ) -> Result<Self> {
         Ok(Self {
             group_id,
             start: date.with_hms(template.hour_start, 0, 0)?.assume_utc(),
             end: date.with_hms(template.hour_end, 0, 0)?.assume_utc(),
-            template_id: template.id,
+            template_id,
         })
     }
 }
@@ -190,9 +194,9 @@ impl<'g, 's> ResolvedColle<'g, 's> {
         f.write_fmt(format_args!(
             "{}: {} {} {} {} avec {} en {}",
             match format {
-                ColleStringFormat::Explicit => self.template.id.explicit(),
+                ColleStringFormat::Explicit => self.colle.template_id.explicit(),
                 ColleStringFormat::Implicit | ColleStringFormat::ForProf(_) =>
-                    self.template.id.to_string(),
+                    self.colle.template_id.to_string(),
             },
             Jour::from(self.colle.start.weekday()).as_str(),
             self.colle.start.day(),
