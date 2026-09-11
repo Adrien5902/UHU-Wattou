@@ -24,7 +24,7 @@ impl Resolve for Group {
     type Id = GroupId;
     type ResolvedSelf<'g: 's, 's> = ResolvedGroup<'g, 's>;
     fn from_id<'g>(id: &Self::Id, guild_data: &'g GuildDataPersistent) -> Option<&'g Self> {
-        guild_data.groups.get(*id - 1)
+        guild_data.groups.get(id.checked_sub(1)?)
     }
 
     fn resolve<'s, 'g: 's>(
