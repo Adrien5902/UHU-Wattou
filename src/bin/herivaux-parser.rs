@@ -1,6 +1,5 @@
 use color_eyre::eyre::Result;
 use regex::regex;
-use reqwest;
 use std::{collections::HashMap, env::args, fs, path::PathBuf};
 use time::{Date, SignedDuration, macros::format_description};
 use wattou_bot::{
@@ -9,6 +8,7 @@ use wattou_bot::{
         group::Group,
         guild::GuildDataPersistent,
         prof::Prof,
+        student::Student,
     },
     utils::Jour,
 };
@@ -28,12 +28,32 @@ async fn main() -> Result<()> {
     let mut profs: Vec<Prof> = Vec::new();
     let mut colles = Vec::new();
     let mut colle_templates: HashMap<ColleTemplateId, ColleTemplate> = HashMap::new();
+    let mut students = Vec::new();
 
     for group_id in 1..=16 {
         let url =
             format!("https://www.normalesup.org/~heriveau/MP2526/0Groupes/groupe_{group_id}.html");
         let content = reqwest::get(url).await?.text().await?;
-        for split in content.split("class=\"week-block\"").skip(1) {
+        let mut content_iter = content.split("class=\"week-block\"");
+
+        let header_str = content_iter.next().unwrap();
+        let inner_members_str = header_str
+            .split("<span class=\"label\">Membres :</span> ")
+            .skip(1)
+            .next()
+            .unwrap()
+            .split("</div>")
+            .next()
+            .unwrap();
+
+        for member_str in inner_members_str.split(" — ") {
+            let mut memeber_str_split = member_str.split(" ");
+            let first_name = memeber_str_split.next().unwrap();
+            let last_name = memeber_str_split.collect();
+            students.push(Student::new(first_name.to_owned(), last_name, group_id));
+        }
+
+        for split in content_iter {
             let inner = split.split("class=\"dates\"").skip(1).next().expect("oups");
             let mut iter = inner.split("<td>");
 
@@ -125,11 +145,13 @@ async fn main() -> Result<()> {
 
         groups.push(Group {
             id: group_id,
+            students: Vec::new(),
             colles: Vec::new(),
         });
     }
 
     colles.sort();
+    students.sort();
 
     let data = GuildDataPersistent {
         profs,
@@ -139,6 +161,14 @@ async fn main() -> Result<()> {
             .map(|(i, (colle, group_id))| {
                 groups[group_id - 1].colles.push(i);
                 colle
+            })
+            .collect(),
+        students: students
+            .into_iter()
+            .enumerate()
+            .map(|(i, student)| {
+                groups[student.group_id() - 1].students.push(i);
+                student
             })
             .collect(),
         groups,

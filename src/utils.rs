@@ -129,3 +129,10 @@ impl From<Jour> for &'static str {
         value.as_str()
     }
 }
+
+pub fn easy_comp_string(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect::<String>()
+        .to_lowercase()
+}

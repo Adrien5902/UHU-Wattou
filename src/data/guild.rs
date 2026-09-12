@@ -1,17 +1,10 @@
 use crate::{
     data::{
-        colle::{Colle, ColleStringFormat, ColleTemplate, ColleTemplateId},
-        group::{Group, GroupId},
-        prof::Prof,
-        resolve::Resolve,
-    },
-    debug,
-    error::WattouError,
-    refreshable_message::{OptionalRefreshableMessage, RefreshableMessageKind},
-    utils::month_to_short_fr,
+        colle::{Colle, ColleStringFormat, ColleTemplate, ColleTemplateId}, group::{Group, GroupId}, prof::Prof, resolve::Resolve, student::{Student, StudentId},
+    }, debug, error::WattouError, refreshable_message::{OptionalRefreshableMessage, RefreshableMessageKind}, utils::month_to_short_fr,
 };
 use color_eyre::Result;
-use poise::serenity_prelude::{GuildId, Http};
+use poise::serenity_prelude::{GuildId, Http, UserId};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 use time::{OffsetDateTime, Weekday};
@@ -34,12 +27,17 @@ pub struct GuildDataPersistent {
     pub colles: Vec<Colle>,
     pub groups: Vec<Group>,
     pub ghosts: Vec<GroupId>,
+    pub students: Vec<Student>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct GuildDataMutable {
+    #[serde(default)]
     pub toutes_les_colles_msg: OptionalRefreshableMessage<ToutesLesCollesMessage>,
+    #[serde(default)]
     pub semaine_tp_msg: OptionalRefreshableMessage<SemaineTPMessage>,
+    #[serde(default)]
+    pub students_link: HashMap<UserId, StudentId>,
 }
 
 impl GuildData {

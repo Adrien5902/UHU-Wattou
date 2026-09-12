@@ -93,6 +93,7 @@ async fn main() -> Result<()> {
                 commands::toutes_les_colles(),
                 commands::semaine_tp(),
                 commands::colles_calendrier(),
+                commands::link(),
             ],
             ..Default::default()
         })

@@ -1,6 +1,5 @@
 use crate::{
-    bot::Context,
-    data::{colle::ColleStringFormat, prof::Prof},
+    bot::Context, data::{colle::ColleStringFormat, prof::Prof}, utils::easy_comp_string,
 };
 use color_eyre::{Result, eyre::eyre};
 use poise::{
@@ -80,11 +79,4 @@ pub async fn autocomplete_prof(ctx: Context<'_>, partial: &str) -> CreateAutocom
             .map(|c| AutocompleteChoice::new(c.clone(), c))
             .collect(),
     )
-}
-
-fn easy_comp_string(s: &str) -> String {
-    s.chars()
-        .filter(|c| c.is_alphanumeric())
-        .collect::<String>()
-        .to_lowercase()
 }

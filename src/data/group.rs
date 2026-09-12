@@ -2,6 +2,7 @@ use crate::data::{
     colle::{Colle, ColleId},
     guild::GuildDataPersistent,
     resolve::Resolve,
+    student::StudentId,
 };
 use color_eyre::eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
@@ -9,9 +10,10 @@ use time::OffsetDateTime;
 
 pub type GroupId = usize;
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Group {
     pub id: GroupId,
+    pub students: Vec<StudentId>,
     pub colles: Vec<ColleId>,
 }
 

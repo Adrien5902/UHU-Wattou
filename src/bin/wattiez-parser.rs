@@ -145,6 +145,7 @@ impl WattiezDataDir {
 
             groups.push(Group {
                 id: group_id,
+                students: Vec::new(),
                 colles: Vec::new(),
             });
         }
@@ -159,6 +160,7 @@ impl WattiezDataDir {
             profs,
             colle_templates,
             ghosts: Vec::new(),
+            students: Vec::new(),
             groups,
             colles,
         })
