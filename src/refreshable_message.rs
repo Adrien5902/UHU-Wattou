@@ -37,7 +37,7 @@ impl<T: RefreshableMessageKind> RefreshableMessage<T> {
             }
         }
 
-        println!(
+        debug!(
             "refreshed message {:?} for guild TODO INSERT GUILD_ID",
             self.kind
         );
@@ -82,7 +82,7 @@ impl<T: RefreshableMessageKind> OptionalRefreshableMessage<T> {
         guild_data: &GuildDataPersistent,
     ) -> Result<()> {
         if let Some(message) = &self.0 {
-            if !message.refresh(http, guild_data).await?{
+            if !message.refresh(http, guild_data).await? {
                 self.0 = None
             }
         }
