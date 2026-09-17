@@ -12,6 +12,9 @@ name = "wattiez-parser"
 [[bin]]
 name = "herivaux-parser"
 
+[[bin]]
+name = "press-review-dates-parser"
+
 [dependencies]
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread"] }
 dotenv = "0.15"

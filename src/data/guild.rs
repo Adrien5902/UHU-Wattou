@@ -1,13 +1,22 @@
 use crate::{
     data::{
-        colle::{Colle, ColleStringFormat, ColleTemplate, ColleTemplateId}, group::{Group, GroupId}, prof::Prof, resolve::Resolve, student::{Student, StudentId},
-    }, debug, error::WattouError, refreshable_message::{OptionalRefreshableMessage, RefreshableMessageKind}, utils::month_to_short_fr,
+        colle::{Colle, ColleStringFormat, ColleTemplate, ColleTemplateId},
+        group::{Group, GroupId},
+        prof::Prof,
+        resolve::Resolve,
+        student::{Student, StudentId},
+    },
+    debug,
+    error::WattouError,
+    periodic_message::{OptionalPeriodicMessage, PeriodicMessageKind},
+    refreshable_message::{OptionalRefreshableMessage, RefreshableMessageKind},
+    utils::month_to_short_fr,
 };
-use color_eyre::Result;
+use color_eyre::{Result, eyre::eyre};
 use poise::serenity_prelude::{GuildId, Http, UserId};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
-use time::{OffsetDateTime, Weekday};
+use time::{Date, OffsetDateTime, SignedDuration, Weekday};
 use tokio::sync::Mutex;
 
 pub type WeekId = usize;
@@ -27,7 +36,9 @@ pub struct GuildDataPersistent {
     pub colles: Vec<Colle>,
     pub groups: Vec<Group>,
     pub ghosts: Vec<GroupId>,
+    // This is sorted by last name alphabetically
     pub students: Vec<Student>,
+    pub press_review_dates: Vec<Date>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -36,6 +47,8 @@ pub struct GuildDataMutable {
     pub toutes_les_colles_msg: OptionalRefreshableMessage<ToutesLesCollesMessage>,
     #[serde(default)]
     pub semaine_tp_msg: OptionalRefreshableMessage<SemaineTPMessage>,
+    #[serde(default)]
+    pub press_review_msg: OptionalPeriodicMessage<PressReviewMessage>,
     #[serde(default)]
     pub students_link: HashMap<UserId, StudentId>,
 }
@@ -95,6 +108,12 @@ impl GuildData {
             .await
             .semaine_tp_msg
             .refresh_if_some(http, &self.persistent)
+            .await?;
+        self.mutable
+            .lock()
+            .await
+            .press_review_msg
+            .update_if_some(http, self)
             .await?;
         self.save().await?;
         Ok(())
@@ -171,5 +190,49 @@ impl RefreshableMessageKind for SemaineTPMessage {
             grp1,
             grp2
         ))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct PressReviewMessage;
+impl PressReviewMessage {
+    const STUDENTS_PER_WEEK: usize = 3;
+}
+impl PeriodicMessageKind for PressReviewMessage {
+    async fn content(&self, guild_data: &GuildDataPersistent) -> Result<Option<String>> {
+        let now = OffsetDateTime::now_local()?.date();
+
+        // Find next press review date
+        let (week_number, week_date) = guild_data
+            .press_review_dates
+            .iter()
+            .enumerate()
+            .find(|(_, date)| **date >= now)
+            .ok_or_else(|| eyre!("Couldn't find next week for press review"))?;
+
+        let one_week = SignedDuration::days(7);
+        let saturday_date = week_date
+            .saturating_sub(one_week)
+            .next_occurrence(Weekday::Saturday);
+        if now < saturday_date {
+            return Ok(None);
+        }
+
+        let press_review_students = (0..Self::STUDENTS_PER_WEEK)
+            .map(|i| {
+                let n = (week_number * Self::STUDENTS_PER_WEEK + i) % guild_data.students.len();
+                &guild_data.students[n]
+            })
+            .collect::<Vec<_>>();
+
+        let out = format!(
+            "### Next week's press review team: {}",
+            press_review_students
+                .iter()
+                // TODO: implement mention
+                .map(|s| format!("\n- {s}"))
+                .collect::<String>()
+        );
+        Ok(Some(out))
     }
 }

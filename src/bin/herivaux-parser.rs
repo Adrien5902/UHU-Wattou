@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
         for member_str in inner_members_str.split(" — ") {
             let mut memeber_str_split = member_str.split(" ");
             let first_name = memeber_str_split.next().unwrap();
-            let last_name = memeber_str_split.collect();
+            let last_name = memeber_str_split.collect::<String>().to_uppercase();
             students.push(Student::new(first_name.to_owned(), last_name, group_id));
         }
 
@@ -172,8 +172,9 @@ async fn main() -> Result<()> {
             })
             .collect(),
         groups,
-        ghosts: Vec::new(),
         colle_templates,
+        ghosts: Vec::new(),
+        press_review_dates: Vec::new(),
     };
 
     fs::write(out_path, ron::to_string(&data)?)?;

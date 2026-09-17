@@ -4,5 +4,6 @@ pub mod bot;
 pub mod commands;
 pub mod data;
 pub mod error;
+pub mod periodic_message;
 pub mod refreshable_message;
 pub mod utils;

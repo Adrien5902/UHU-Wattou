@@ -160,6 +160,7 @@ impl WattiezDataDir {
             profs,
             colle_templates,
             ghosts: Vec::new(),
+            press_review_dates: Vec::new(),
             students: Vec::new(),
             groups,
             colles,

@@ -94,6 +94,7 @@ async fn main() -> Result<()> {
                 commands::semaine_tp(),
                 commands::colles_calendrier(),
                 commands::link(),
+                commands::press_reviews(),
             ],
             ..Default::default()
         })
