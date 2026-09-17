@@ -116,7 +116,7 @@ impl RefreshableMessageKind for ToutesLesCollesMessage {
 
         for group in &guild_data.groups {
             let resolved = group.resolve(guild_data)?;
-            let next_colles = resolved.get_next_colles(2);
+            let next_colles = resolved.get_next_colles(2)?;
             final_message.push_str("\n## Groupe ");
             final_message.push_str(&group.id.to_string());
 
@@ -146,8 +146,7 @@ impl RefreshableMessageKind for ToutesLesCollesMessage {
 pub struct SemaineTPMessage;
 impl RefreshableMessageKind for SemaineTPMessage {
     fn content(&self, _guild_data: &GuildDataPersistent) -> Result<String> {
-        let date = OffsetDateTime::now_local()
-            .unwrap()
+        let date = OffsetDateTime::now_local()?
             .date()
             .next_occurrence(Weekday::Wednesday);
 

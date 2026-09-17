@@ -1,5 +1,7 @@
 use crate::{
-    bot::Context, data::{colle::ColleStringFormat, prof::Prof}, utils::easy_comp_string,
+    bot::Context,
+    data::{colle::ColleStringFormat, prof::Prof},
+    utils::easy_comp_string,
 };
 use color_eyre::{Result, eyre::eyre};
 use poise::{
@@ -34,7 +36,7 @@ pub async fn colles_de_prof(
     let mut content = String::new();
     content.write_fmt(format_args!("Prochaines colles pour {}:", prof_str))?;
 
-    for colle in Prof::get_next_colles(id, &guild_data.persistent, limit) {
+    for colle in Prof::get_next_colles(id, &guild_data.persistent, limit)? {
         content.push_str("\n- ");
         colle.format(
             &mut content,

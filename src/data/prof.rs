@@ -57,9 +57,9 @@ impl Prof {
         id: ProfId,
         guild_data: &'g GuildDataPersistent,
         limit: usize,
-    ) -> Box<[ResolvedColle<'g, 's>]> {
-        let now = OffsetDateTime::now_utc();
-        guild_data
+    ) -> Result<Box<[ResolvedColle<'g, 's>]>> {
+        let now = OffsetDateTime::now_local()?;
+        Ok(guild_data
             .colles
             .iter()
             .filter_map(|colle| {
@@ -67,7 +67,7 @@ impl Prof {
                 (id == resolved.template.prof && colle.end > now).then_some(resolved)
             })
             .take(limit)
-            .collect()
+            .collect())
     }
 
     pub fn name(&self) -> &str {

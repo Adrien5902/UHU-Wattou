@@ -48,13 +48,14 @@ impl Resolve for Group {
 }
 
 impl<'g, 's> ResolvedGroup<'g, 's> {
-    pub fn get_next_colles(&self, limit: usize) -> Box<[&Colle]> {
-        let now = OffsetDateTime::now_utc();
-        self.colles
+    pub fn get_next_colles(&self, limit: usize) -> Result<Box<[&Colle]>> {
+        let now = OffsetDateTime::now_local()?;
+        Ok(self
+            .colles
             .iter()
             .filter(|colle| colle.end > now)
             .take(limit)
             .copied()
-            .collect()
+            .collect())
     }
 }

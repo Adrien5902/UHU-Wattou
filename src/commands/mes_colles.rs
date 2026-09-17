@@ -45,7 +45,7 @@ pub async fn mes_colles(
     ))?;
 
     let resolved = group.resolve(&guild_data.persistent)?;
-    for colle in resolved.get_next_colles(5) {
+    for colle in resolved.get_next_colles(5)? {
         let resolved_colle = colle.resolve(&guild_data.persistent)?;
         content.push_str("\n- ");
         resolved_colle.format(
